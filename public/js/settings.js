@@ -1,7 +1,10 @@
 import { api } from './api.js';
-import { formatInput, parseAmount } from './calc.js';
+import { formatInput, parseAmount, parseQty } from './calc.js';
 import { $, h, toast } from './dom.js';
 import { PICKER_ICONS, icon, tileTint } from './icons.js';
+import { loginCard, session, unconfiguredNotice } from './session.js';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const LISTS = {
   materials: {
@@ -67,6 +70,13 @@ function toDraft(config) {
       businessName: config.settings.businessName,
       subtitle: config.settings.subtitle,
       vatRate: formatInput(config.settings.vatRate),
+      phone: config.settings.phone ?? '',
+      email: config.settings.email ?? '',
+      address: config.settings.address ?? '',
+      vatId: config.settings.vatId ?? '',
+      terms: config.settings.terms ?? '',
+      validityDays: String(config.settings.validityDays ?? 30),
+      depositPercent: formatInput(config.settings.depositPercent ?? 0),
     },
     materials: items(config.materials),
     extras: items(config.extras),
@@ -90,6 +100,13 @@ function toPayload(draft) {
       businessName: draft.settings.businessName.trim(),
       subtitle: draft.settings.subtitle.trim(),
       vatRate: parseAmount(draft.settings.vatRate),
+      phone: draft.settings.phone.trim(),
+      email: draft.settings.email.trim(),
+      address: draft.settings.address.trim(),
+      vatId: draft.settings.vatId.trim(),
+      terms: draft.settings.terms.trim(),
+      validityDays: parseQty(draft.settings.validityDays),
+      depositPercent: parseAmount(draft.settings.depositPercent),
     },
     materials: items(draft.materials),
     extras: items(draft.extras),
@@ -169,77 +186,25 @@ export function createSettings({ onSaved }) {
   }
 
   function renderUnconfigured() {
-    setView('unconfigured', [
-      h(
-        'div',
-        { class: 'notice is-warn' },
-        icon('key-round'),
-        h(
-          'div',
-          {},
-          h('strong', {}, 'Δεν έχει οριστεί κωδικός διαχειριστή'),
-          'Πρόσθεσε ένα secret με όνομα ',
-          h('code', {}, 'ADMIN_PASSWORD'),
-          ' στο Worker στο Cloudflare (Settings → Variables and Secrets) ή τρέξε ',
-          h('code', {}, 'npx wrangler secret put ADMIN_PASSWORD'),
-          '.',
-        ),
-      ),
-    ]);
+    setView('unconfigured', [unconfiguredNotice()]);
   }
 
   function renderLogin(message = '') {
-    const password = h('input', {
-      type: 'password',
-      autocomplete: 'current-password',
-      placeholder: 'Κωδικός διαχειριστή',
-      'aria-label': 'Κωδικός διαχειριστή',
-      enterkeyhint: 'go',
-    });
-    const error = h('p', { class: 'form-error', role: 'alert' }, message);
-    const submit = h('button', { type: 'submit', class: 'btn btn-cta btn-block' }, icon('lock'), 'Σύνδεση');
-
-    async function onSubmit(event) {
-      event.preventDefault();
-      if (!password.value) {
-        error.textContent = 'Γράψε τον κωδικό.';
-        password.focus();
-        return;
-      }
-      submit.disabled = true;
-      error.textContent = '';
-      try {
-        await api('POST', '/api/admin/login', { password: password.value });
-        if (hasChanges()) {
-          // Session expired mid-edit: keep the unsaved changes.
-          renderEditor();
-          toast('Συνδέθηκες ξανά. Οι αλλαγές σου είναι εδώ, πάτα Αποθήκευση.');
-        } else {
-          await openEditor();
-        }
-      } catch (err) {
-        error.textContent = err.message;
-        submit.disabled = false;
-        password.select();
-      }
-    }
-
     setView('login', [
-      h(
-        'section',
-        { class: 'card login-card', 'data-accent': 'rose' },
-        h('span', { class: 'badge-icon' }, icon('lock')),
-        h('h2', {}, 'Περιοχή διαχειριστή'),
-        h('p', {}, 'Εδώ ορίζονται οι τιμές, τα υλικά και τα extras της κοστολόγησης.'),
-        h(
-          'form',
-          { onsubmit: onSubmit },
-          h('input', { type: 'text', class: 'sr-only', autocomplete: 'username', value: 'admin', tabindex: '-1', 'aria-hidden': 'true' }),
-          password,
-          submit,
-          error,
-        ),
-      ),
+      loginCard({
+        title: 'Περιοχή διαχειριστή',
+        text: 'Εδώ ορίζονται οι τιμές, τα υλικά και τα extras της κοστολόγησης.',
+        message,
+        onSuccess: async () => {
+          if (hasChanges()) {
+            // Session expired mid-edit: keep the unsaved changes.
+            renderEditor();
+            toast('Συνδέθηκες ξανά. Οι αλλαγές σου είναι εδώ, πάτα Αποθήκευση.');
+          } else {
+            await openEditor();
+          }
+        },
+      }),
     ]);
   }
 
@@ -254,6 +219,7 @@ export function createSettings({ onSaved }) {
       ),
       errorBox,
       generalCard(),
+      businessCard(),
       ...Object.keys(LISTS).map(listCard),
     ]);
   }
@@ -292,6 +258,45 @@ export function createSettings({ onSaved }) {
         h('span', { class: 'label' }, 'ΦΠΑ'),
         h('span', { class: 'input-wrap' }, vat, h('span', { class: 'suffix' }, '%')),
         h('span', { class: 'hint' }, 'Χρησιμοποιείται για το «Σύνολο με ΦΠΑ». Βάλε 0 για να μην εμφανίζεται.'),
+      ),
+    );
+  }
+
+  // Contact details and terms printed on PDF quotes.
+  function businessCard() {
+    const s = draft.settings;
+    const bind = (field) => (event) => {
+      s[field] = event.target.value;
+      changed(event.target);
+    };
+    const input = (field, attrs = {}) => h('input', { value: s[field], 'data-field': field, ...attrs, oninput: bind(field) });
+    const field = (label, control, hint) =>
+      h('label', { class: 'field' }, h('span', { class: 'label' }, label), control, hint && h('span', { class: 'hint' }, hint));
+    const withSuffix = (control, suffix) => h('span', { class: 'input-wrap' }, control, h('span', { class: 'suffix' }, suffix));
+
+    return h(
+      'section',
+      { class: 'card', 'data-accent': 'rose' },
+      cardHead('file-text', 'Στοιχεία για τα PDF', 'Προσφορές'),
+      h('p', { class: 'card-desc' }, 'Εμφανίζονται στην κεφαλίδα και στο τέλος κάθε PDF προσφοράς.'),
+      h(
+        'div',
+        { class: 'field-row' },
+        field('Τηλέφωνο', input('phone', { type: 'tel', inputmode: 'tel', maxlength: '40', autocomplete: 'tel', placeholder: '210 1234567' })),
+        field('ΑΦΜ', input('vatId', { inputmode: 'numeric', maxlength: '20', placeholder: '9 ψηφία' })),
+      ),
+      field('Email', input('email', { type: 'email', inputmode: 'email', maxlength: '120', autocomplete: 'email', placeholder: 'info@velokas.gr' })),
+      field('Διεύθυνση', input('address', { maxlength: '160', autocomplete: 'street-address', placeholder: 'Οδός, αριθμός, πόλη' })),
+      h(
+        'div',
+        { class: 'field-row' },
+        field('Ισχύς προσφοράς', withSuffix(input('validityDays', { inputmode: 'numeric', maxlength: '3' }), 'ημ.')),
+        field('Προκαταβολή', withSuffix(input('depositPercent', { inputmode: 'decimal', maxlength: '6' }), '%')),
+      ),
+      field(
+        'Όροι προσφοράς',
+        h('textarea', { rows: '4', maxlength: '2000', 'data-field': 'terms', oninput: bind('terms'), placeholder: 'Η τιμή περιλαμβάνει μεταφορά και τοποθέτηση.\nΠροκαταβολή με την ανάθεση, το υπόλοιπο με την παράδοση.' }, s.terms),
+        'Τρόπος πληρωμής, χρόνος παράδοσης, τι περιλαμβάνει η τιμή.',
       ),
     );
   }
@@ -478,6 +483,11 @@ export function createSettings({ onSaved }) {
     if (!s.businessName.trim()) flag($('[data-field="businessName"]', root), 'Η επωνυμία είναι υποχρεωτική.');
     const vat = parseAmount(s.vatRate);
     if (vat === null || vat > 100) flag($('[data-field="vatRate"]', root), 'Ο ΦΠΑ πρέπει να είναι από 0 έως 100%.');
+    if (s.email.trim() && !EMAIL_RE.test(s.email.trim())) flag($('[data-field="email"]', root), 'Το email δεν φαίνεται σωστό.');
+    const days = parseQty(s.validityDays);
+    if (days === null || days > 365) flag($('[data-field="validityDays"]', root), 'Η ισχύς πρέπει να είναι από 0 έως 365 ημέρες.');
+    const deposit = parseAmount(s.depositPercent);
+    if (deposit === null || deposit > 100) flag($('[data-field="depositPercent"]', root), 'Η προκαταβολή πρέπει να είναι από 0 έως 100%.');
 
     for (const [key, meta] of Object.entries(LISTS)) {
       draft[key].forEach((item, index) => {
@@ -514,8 +524,10 @@ export function createSettings({ onSaved }) {
       toast('Οι αλλαγές αποθηκεύτηκαν.');
       onSaved(publicConfig(saved));
     } catch (error) {
-      if (error.status === 401) renderLogin(error.message);
-      else if (error.status === 409) showErrors([error.message], { reload: true });
+      if (error.status === 401) {
+        session.expired();
+        renderLogin(error.message);
+      } else if (error.status === 409) showErrors([error.message], { reload: true });
       else showErrors(error.errors.length ? error.errors : [error.message]);
     } finally {
       setSaving(false);
@@ -532,7 +544,7 @@ export function createSettings({ onSaved }) {
   async function logout() {
     if (hasChanges() && !window.confirm('Έχεις αλλαγές που δεν αποθηκεύτηκαν. Έξοδος χωρίς αποθήκευση;')) return;
     try {
-      await api('POST', '/api/admin/logout');
+      await session.logout();
     } catch {
       /* the cookie expires anyway */
     }
@@ -547,17 +559,19 @@ export function createSettings({ onSaved }) {
       setBaseline(await api('GET', '/api/admin/config'));
       renderEditor();
     } catch (error) {
-      if (error.status === 401) renderLogin(error.message);
-      else renderError(error);
+      if (error.status === 401) {
+        session.expired();
+        renderLogin(error.message);
+      } else renderError(error);
     }
   }
 
   async function refresh() {
     renderLoading();
     try {
-      const session = await api('GET', '/api/admin/session');
-      if (!session.configured) renderUnconfigured();
-      else if (!session.authenticated) renderLogin();
+      const state = await session.refresh();
+      if (!state.configured) renderUnconfigured();
+      else if (!state.authenticated) renderLogin();
       else await openEditor();
     } catch (error) {
       renderError(error);
@@ -573,9 +587,17 @@ export function createSettings({ onSaved }) {
         renderEditor();
       }
     } catch (error) {
-      if (error.status === 401 && view === 'editor' && !hasChanges()) renderLogin();
+      if (error.status === 401) {
+        session.expired();
+        if (view === 'editor' && !hasChanges()) renderLogin();
+      }
     }
   }
+
+  // Logged out from another tab of the app (logging in is picked up by show()).
+  session.onChange((state) => {
+    if (!state.authenticated && view === 'editor' && !hasChanges()) renderLogin();
+  });
 
   saveBtn.addEventListener('click', save);
   $('#discardBtn').addEventListener('click', discard);

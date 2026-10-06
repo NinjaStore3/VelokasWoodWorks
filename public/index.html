@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Κοστολόγηση Κουζίνας · Velokas Woodworks</title>
-  <meta name="description" content="Γρήγορη κοστολόγηση κουζίνας για τη Velokas Woodworks.">
+  <meta name="description" content="Κοστολόγηση κουζίνας, προσφορές σε PDF και κοπές φύλλων για τη Velokas Woodworks.">
   <meta name="theme-color" content="#2E1C12">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Velokas">
@@ -23,19 +23,13 @@
       <div class="brand">
         <img class="brand-mark" src="/img/logo.svg" alt="" width="44" height="44">
         <span class="brand-name" data-bind="businessName">Velokas Woodworks</span>
+        <button type="button" class="install-btn" id="installBtn" hidden>
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#download"></use></svg>
+          Εγκατάσταση
+        </button>
       </div>
       <h1 class="hero-title" id="pageTitle">Κοστολόγηση Κουζίνας</h1>
       <p class="hero-sub" id="pageSubtitle" data-bind="subtitle">Τιμές χωρίς ΦΠΑ • βάση με τα δικά σου σημερινά δεδομένα</p>
-      <nav class="tabs" aria-label="Ενότητες">
-        <a class="tab" href="#calc" id="tab-calc" aria-current="page">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#calculator"></use></svg>
-          Κοστολόγηση
-        </a>
-        <a class="tab" href="#settings" id="tab-settings">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#settings"></use></svg>
-          Ρυθμίσεις
-        </a>
-      </nav>
     </div>
   </header>
 
@@ -102,12 +96,57 @@
           <div class="extras" id="extrasList"></div>
         </section>
 
-        <!-- 3. Internal costing (optional, never shared) -->
+        <!-- 3. Customer, discount, notes (printed on the quote) -->
+        <section class="card" data-accent="sky" aria-labelledby="clientTitle">
+          <header class="card-head">
+            <span class="badge-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#user-round"></use></svg></span>
+            <div class="card-titles">
+              <p class="eyebrow">Βήμα 3</p>
+              <h2 id="clientTitle">Πελάτης &amp; έκπτωση</h2>
+            </div>
+            <output class="card-sum" id="discountSum" aria-label="Έκπτωση" hidden></output>
+          </header>
+
+          <div class="field">
+            <label for="discount">Έκπτωση</label>
+            <div class="discount-row">
+              <div class="input-wrap">
+                <input id="discount" inputmode="decimal" placeholder="0" enterkeyhint="done">
+                <span class="suffix" id="discountSuffix">%</span>
+              </div>
+              <div class="segmented" role="group" aria-label="Τύπος έκπτωσης">
+                <button type="button" data-mode="percent" aria-pressed="true">%</button>
+                <button type="button" data-mode="amount" aria-pressed="false">€</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="customerName">Πελάτης</label>
+            <input id="customerName" maxlength="100" placeholder="Όνομα και επώνυμο" enterkeyhint="next">
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="customerPhone">Τηλέφωνο</label>
+              <input id="customerPhone" type="tel" inputmode="tel" maxlength="40" enterkeyhint="next">
+            </div>
+            <div class="field">
+              <label for="customerAddress">Περιοχή</label>
+              <input id="customerAddress" maxlength="160" enterkeyhint="next">
+            </div>
+          </div>
+          <div class="field">
+            <label for="quoteNotes">Σημειώσεις στην προσφορά</label>
+            <textarea id="quoteNotes" rows="3" maxlength="2000" placeholder="π.χ. Χρώμα λευκό ματ, παράδοση σε 5 εβδομάδες"></textarea>
+          </div>
+        </section>
+
+        <!-- 4. Internal costing (optional, never shared) -->
         <details class="card card-collapsible" data-accent="violet" id="costCard">
           <summary class="card-head">
             <span class="badge-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#piggy-bank"></use></svg></span>
             <div class="card-titles">
-              <p class="eyebrow">Βήμα 3 · προαιρετικό</p>
+              <p class="eyebrow">Βήμα 4 · προαιρετικό</p>
               <h2>Εσωτερική κοστολόγηση</h2>
             </div>
             <svg class="icon card-chev" aria-hidden="true"><use href="/icons.svg#chevron-down"></use></svg>
@@ -125,6 +164,16 @@
           Καθαρισμός
         </button>
       </form>
+    </section>
+
+    <!-- Saved quotes (admin) -->
+    <section id="view-quotes" class="view" aria-label="Προσφορές" hidden>
+      <div id="quotesRoot" class="stack"></div>
+    </section>
+
+    <!-- Cut list optimiser -->
+    <section id="view-cuts" class="view" aria-label="Κοπές" hidden>
+      <div id="cutsRoot" class="stack"></div>
     </section>
 
     <!-- Settings (admin) -->
@@ -148,6 +197,21 @@
     </div>
   </div>
 
+  <!-- Sticky summary for the cut list -->
+  <div class="dock" id="cutsDock" hidden>
+    <div class="dock-inner">
+      <div class="dock-sum">
+        <span class="dock-label">Χρειάζεσαι</span>
+        <output class="dock-amount" id="cutsDockSheets" aria-live="polite"></output>
+        <span class="dock-sub" id="cutsDockSub"></span>
+      </div>
+      <button type="button" class="btn btn-cta" id="cutsDockBtn">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#layout-grid"></use></svg>
+        Σχέδιο
+      </button>
+    </div>
+  </div>
+
   <!-- Sticky save bar for settings -->
   <div class="dock dock-save" id="saveDock" hidden>
     <div class="dock-inner">
@@ -165,6 +229,13 @@
     </div>
   </div>
 
+  <nav class="tabbar" aria-label="Ενότητες">
+    <a class="tabbar-item" href="#calc" id="tab-calc" aria-current="page"><svg class="icon" aria-hidden="true"><use href="/icons.svg#calculator"></use></svg><span>Κοστολόγηση</span></a>
+    <a class="tabbar-item" href="#quotes" id="tab-quotes"><svg class="icon" aria-hidden="true"><use href="/icons.svg#folder-open"></use></svg><span>Προσφορές</span></a>
+    <a class="tabbar-item" href="#cuts" id="tab-cuts"><svg class="icon" aria-hidden="true"><use href="/icons.svg#layout-grid"></use></svg><span>Κοπές</span></a>
+    <a class="tabbar-item" href="#settings" id="tab-settings"><svg class="icon" aria-hidden="true"><use href="/icons.svg#settings"></use></svg><span>Ρυθμίσεις</span></a>
+  </nav>
+
   <!-- Quote result -->
   <dialog class="sheet" id="resultSheet" aria-labelledby="resultTitle">
     <div class="sheet-body">
@@ -179,16 +250,58 @@
         </button>
       </header>
       <div id="resultContent"></div>
-      <div class="sheet-actions">
-        <button type="button" class="btn btn-cta" id="shareBtn">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#share-2"></use></svg>
-          Αποστολή
+      <div class="sheet-actions sheet-actions-3">
+        <button type="button" class="btn btn-cta" id="pdfBtn">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#file-down"></use></svg>
+          PDF
         </button>
-        <button type="button" class="btn btn-soft" id="copyBtn">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#copy"></use></svg>
-          Αντιγραφή
+        <button type="button" class="btn btn-soft" id="saveQuoteBtn">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#save"></use></svg>
+          <span>Αποθήκευση</span>
+        </button>
+        <button type="button" class="btn btn-soft" id="textBtn">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#send"></use></svg>
+          Κείμενο
         </button>
       </div>
+    </div>
+  </dialog>
+
+  <!-- PDF ready: share / download / open -->
+  <dialog class="sheet" id="pdfSheet" aria-labelledby="pdfSheetTitle">
+    <div class="sheet-body">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <header class="sheet-head">
+        <div>
+          <h2 id="pdfSheetTitle">Το PDF είναι έτοιμο</h2>
+          <p class="sheet-meta" id="pdfFileName"></p>
+        </div>
+        <button type="button" class="icon-btn" data-close aria-label="Κλείσιμο">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"></use></svg>
+        </button>
+      </header>
+      <div class="pdf-actions">
+        <button type="button" class="btn btn-cta btn-block" id="pdfShareBtn"><svg class="icon" aria-hidden="true"><use href="/icons.svg#share-2"></use></svg> Αποστολή</button>
+        <button type="button" class="btn btn-soft btn-block" id="pdfDownloadBtn"><svg class="icon" aria-hidden="true"><use href="/icons.svg#download"></use></svg> Λήψη</button>
+        <button type="button" class="btn btn-soft btn-block" id="pdfOpenBtn"><svg class="icon" aria-hidden="true"><use href="/icons.svg#external-link"></use></svg> Άνοιγμα / εκτύπωση</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Saved quote details (filled by quotes.js) -->
+  <dialog class="sheet" id="quoteSheet" aria-labelledby="quoteSheetTitle">
+    <div class="sheet-body">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <header class="sheet-head">
+        <div>
+          <h2 id="quoteSheetTitle">Προσφορά</h2>
+          <p class="sheet-meta" id="quoteSheetMeta"></p>
+        </div>
+        <button type="button" class="icon-btn" data-close aria-label="Κλείσιμο">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"></use></svg>
+        </button>
+      </header>
+      <div id="quoteSheetContent"></div>
     </div>
   </dialog>
 

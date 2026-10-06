@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { LIMITS, ValidationError, validateConfig } from '../src/validate.js';
+import { LIMITS, ValidationError, validateConfig, validateQuote, validateStatus } from '../src/validate.js';
 
 const valid = () => ({
   version: 3,
@@ -13,9 +13,9 @@ const valid = () => ({
   costs: [{ id: 5, name: 'Μεταφορά', price: 0, icon: 'truck', active: false }],
 });
 
-function errorsFor(body) {
+function errorsFor(body, validate = validateConfig) {
   try {
-    validateConfig(body);
+    validate(body);
   } catch (error) {
     assert.ok(error instanceof ValidationError);
     return error.errors;
@@ -73,4 +73,89 @@ test('rejects non-numeric prices, oversized lists and missing version', () => {
   const noVersion = valid();
   delete noVersion.version;
   assert.match(errorsFor(noVersion).join(' '), /έκδοση/);
+});
+
+test('business details for the PDF are optional and checked when given', () => {
+  const untouched = validateConfig(valid());
+  assert.equal(untouched.settings.phone, undefined, 'missing fields stay as they are');
+  assert.equal(untouched.settings.depositPercent, undefined);
+
+  const body = valid();
+  Object.assign(body.settings, {
+    phone: ' 210  1234567 ',
+    email: 'info@velokas.gr',
+    address: 'Αθήνα',
+    vatId: '123456789',
+    terms: 'Γραμμή 1\n\n\n\nΓραμμή 2  ',
+    validityDays: 30,
+    depositPercent: 33.333,
+  });
+  const { settings } = validateConfig(body);
+  assert.equal(settings.phone, '210 1234567');
+  assert.equal(settings.terms, 'Γραμμή 1\n\nΓραμμή 2');
+  assert.equal(settings.validityDays, 30);
+  assert.equal(settings.depositPercent, 33.33);
+
+  const bad = valid();
+  Object.assign(bad.settings, { email: 'not-an-email', validityDays: 1.5, depositPercent: 120, vatId: '1'.repeat(30) });
+  assert.equal(errorsFor(bad).length, 4);
+});
+
+const quote = () => ({
+  status: 'sent',
+  customer: { name: '  Μαρία  Παπαδάκη ', phone: '690', address: '' },
+  doc: {
+    date: '2026-10-06T10:00:00Z',
+    validityDays: 30,
+    lines: [{ kind: 'base', name: 'Βασική κουζίνα', detail: 'Μελαμίνη', qty: 4.6, unit: 'μ.', unitCents: 32000, totalCents: 147200 }],
+    discountLabel: '10%',
+    discountCents: 14720,
+    vatRate: 24,
+    depositPercent: 40,
+    notes: 'Λευκό ματ',
+  },
+  draft: { meters: '4,6' },
+  costCents: 50000,
+});
+
+test('a valid quote is cleaned up for storage', () => {
+  const result = validateQuote(quote());
+  assert.equal(result.status, 'sent');
+  assert.deepEqual(result.customer, { name: 'Μαρία Παπαδάκη', phone: '690', address: '' });
+  assert.equal(result.doc.date, '2026-10-06T10:00:00.000Z');
+  assert.equal(result.doc.lines[0].name, 'Βασική κουζίνα');
+  assert.equal(result.draftJson, '{"meters":"4,6"}');
+  assert.equal(result.costCents, 50000);
+
+  const noStatus = quote();
+  delete noStatus.status;
+  assert.equal(validateQuote(noStatus).status, undefined, 'left to the caller: new or unchanged');
+});
+
+test('a bad quote reports every problem', () => {
+  const body = quote();
+  body.status = 'won';
+  body.customer.name = 'x'.repeat(101);
+  body.doc.lines.push({ kind: 'extra', name: '', qty: -1, unitCents: 1.5 });
+  body.doc.vatRate = 101;
+  body.doc.validityDays = 400;
+  body.costCents = -1;
+  delete body.draft;
+  const errors = errorsFor(body, validateQuote);
+  assert.equal(errors.length, 9);
+  assert.ok(errors.includes('Γραμμή 2: μη έγκυρη περιγραφή.'));
+
+  const tooManyLines = quote();
+  tooManyLines.doc.lines = Array.from({ length: 101 }, () => quote().doc.lines[0]);
+  assert.deepEqual(errorsFor(tooManyLines, validateQuote), ['Μη έγκυρες γραμμές προσφοράς.']);
+
+  const hugeDraft = quote();
+  hugeDraft.draft = { notes: 'x'.repeat(40_000) };
+  assert.deepEqual(errorsFor(hugeDraft, validateQuote), ['Η προσφορά είναι πολύ μεγάλη.']);
+});
+
+test('only known quote statuses are accepted', () => {
+  assert.equal(validateStatus({ status: 'accepted' }), 'accepted');
+  assert.throws(() => validateStatus({ status: 'won' }), ValidationError);
+  assert.throws(() => validateStatus(null), ValidationError);
 });

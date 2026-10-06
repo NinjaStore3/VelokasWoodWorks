@@ -1,8 +1,8 @@
 {
   "name": "velokas-woodworks",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Kitchen cost calculator for Velokas Woodworks (Cloudflare Workers + D1)",
+  "description": "Kitchen costing, PDF quotes, quote archive and cut lists for Velokas Woodworks (Cloudflare Workers + D1)",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -13,11 +13,15 @@
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "test": "node --test \"tests/*.test.js\"",
-    "test:unit": "node --test tests/calc.test.js tests/validate.test.js",
-    "icons": "node scripts/build-icons.mjs"
+    "test:unit": "node --test tests/calc.test.js tests/validate.test.js tests/cutlist.test.js tests/cutplan.test.js tests/quotes.test.js tests/pdf.test.js",
+    "icons": "node scripts/build-icons.mjs",
+    "vendor": "node scripts/build-vendor.mjs"
   },
   "devDependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
+    "esbuild": "^0.28.1",
     "lucide-static": "^1.52.0",
+    "pdf-lib": "^1.17.1",
     "wrangler": "^4.147.0"
   },
   "overrides": {

@@ -197,6 +197,129 @@ test('unknown routes and methods', async () => {
   assert.equal(response.headers.get('allow'), 'GET');
 });
 
+test('business details are saved and reach the PDF', async () => {
+  const { cookie } = await login();
+  const current = await (await call('GET', '/api/admin/config', { cookie })).json();
+  assert.equal(current.settings.validityDays, 30, 'seeded default');
+  Object.assign(current.settings, {
+    phone: '210 1234567',
+    email: 'info@velokas.gr',
+    address: 'Αθήνα',
+    vatId: '123456789',
+    terms: 'Προκαταβολή 40%.\nΤοποθέτηση σε 5 εβδομάδες.',
+    validityDays: 15,
+    depositPercent: 40,
+  });
+  assert.equal((await call('PUT', '/api/admin/config', { cookie, body: current })).status, 200);
+  const { settings } = await (await call('GET', '/api/config')).json();
+  assert.equal(settings.email, 'info@velokas.gr');
+  assert.equal(settings.terms, 'Προκαταβολή 40%.\nΤοποθέτηση σε 5 εβδομάδες.');
+  assert.equal(settings.validityDays, 15);
+  assert.equal(settings.depositPercent, 40);
+});
+
+function quoteBody(overrides = {}) {
+  const customer = { name: 'Μαρία Παπαδάκη', phone: '6900000000', address: 'Χαλάνδρι' };
+  return {
+    customer,
+    doc: {
+      v: 1,
+      date: '2026-10-06T10:00:00.000Z',
+      validityDays: 30,
+      customer,
+      lines: [
+        { kind: 'base', name: 'Βασική κουζίνα', detail: 'Μελαμίνη', qty: 4.6, unit: 'μ.', unitCents: 32000, totalCents: 1 },
+        { kind: 'extra', name: 'Κάδος', detail: '', qty: 2, unit: 'τεμ.', unitCents: 8000, totalCents: 16000 },
+      ],
+      discountLabel: '10%',
+      discountCents: 16320,
+      vatRate: 24,
+      depositPercent: 40,
+      notes: 'Λευκό ματ.',
+      grossCents: 1, // ignored: totals are worked out again
+    },
+    draft: { meters: '4,6', extras: { 8: { qty: '2', price: null } } },
+    costCents: 50000,
+    ...overrides,
+  };
+}
+
+test('quotes are numbered per year and their totals recomputed', async () => {
+  assert.equal((await call('GET', '/api/admin/quotes')).status, 401);
+  assert.equal((await call('POST', '/api/admin/quotes', { body: quoteBody() })).status, 401);
+  const { cookie } = await login();
+
+  const created = await call('POST', '/api/admin/quotes', { cookie, body: quoteBody() });
+  assert.equal(created.status, 201);
+  const first = await created.json();
+  assert.equal(first.number, '2026-001');
+  assert.equal(first.status, 'draft');
+  assert.equal(first.doc.number, '2026-001');
+  assert.equal(first.doc.lines[0].totalCents, 147200);
+  assert.equal(first.doc.subtotalCents, 163200);
+  assert.equal(first.netCents, 146880);
+  assert.equal(first.doc.vatCents, 35251);
+  assert.equal(first.grossCents, 182131);
+  assert.equal(first.doc.depositCents, 72852);
+  assert.equal(first.costCents, 50000);
+  assert.deepEqual(first.draft, quoteBody().draft);
+
+  const second = await (await call('POST', '/api/admin/quotes', { cookie, body: quoteBody({ status: 'sent' }) })).json();
+  assert.equal(second.number, '2026-002');
+  assert.equal(second.status, 'sent');
+
+  // Half past midnight on 1 January in Athens is still 31 December in UTC.
+  const newYear = quoteBody();
+  newYear.doc.date = '2026-12-31T22:30:00.000Z';
+  const third = await (await call('POST', '/api/admin/quotes', { cookie, body: newYear })).json();
+  assert.equal(third.number, '2027-001');
+
+  const { quotes } = await (await call('GET', '/api/admin/quotes', { cookie })).json();
+  assert.deepEqual(quotes.map((q) => q.number), ['2027-001', '2026-002', '2026-001']);
+  assert.equal('doc' in quotes[0], false, 'the list only has summaries');
+  assert.deepEqual(quotes[2].customer, quoteBody().customer);
+});
+
+test('a quote can be edited, moved along and deleted', async () => {
+  const { cookie } = await login();
+  const created = await (await call('POST', '/api/admin/quotes', { cookie, body: quoteBody({ status: 'sent' }) })).json();
+  const path = `/api/admin/quotes/${created.id}`;
+
+  const edit = quoteBody({ customer: { name: 'Μαρία Π.', phone: '', address: '' } });
+  edit.doc.lines.pop();
+  const updated = await call('PUT', path, { cookie, body: edit });
+  assert.equal(updated.status, 200);
+  const saved = await updated.json();
+  assert.equal(saved.number, created.number, 'the number never changes');
+  assert.equal(saved.status, 'sent', 'no status means unchanged');
+  assert.equal(saved.customer.name, 'Μαρία Π.');
+  assert.equal(saved.doc.lines.length, 1);
+
+  const patched = await call('PATCH', path, { cookie, body: { status: 'accepted' } });
+  assert.equal(patched.status, 200);
+  assert.equal((await patched.json()).status, 'accepted');
+  assert.equal((await call('PATCH', path, { cookie, body: { status: 'won' } })).status, 400);
+  assert.equal((await (await call('GET', path, { cookie })).json()).status, 'accepted');
+
+  assert.equal((await call('DELETE', path, { cookie })).status, 200);
+  for (const [method, body] of [['GET'], ['PUT', edit], ['PATCH', { status: 'sent' }], ['DELETE']]) {
+    assert.equal((await call(method, path, { cookie, body })).status, 404, `${method} after delete`);
+  }
+  assert.equal((await call('GET', '/api/admin/quotes/abc', { cookie })).status, 404);
+  assert.equal((await call('POST', path, { cookie, body: edit })).status, 405);
+});
+
+test('bad quotes are rejected with every reason', async () => {
+  const { cookie } = await login();
+  const body = quoteBody({ status: 'won' });
+  body.doc.lines[0].qty = -1;
+  delete body.draft;
+  const response = await call('POST', '/api/admin/quotes', { cookie, body });
+  assert.equal(response.status, 400);
+  const { errors } = await response.json();
+  assert.equal(errors.length, 3);
+});
+
 // Keep last: it locks out logins from this IP for 15 minutes.
 test('password guessing is throttled', async () => {
   const statuses = [];

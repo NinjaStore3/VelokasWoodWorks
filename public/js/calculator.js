@@ -1,4 +1,6 @@
+import { api } from './api.js';
 import {
+  buildQuoteDoc,
   buildShareText,
   computeQuote,
   emptyDraft,
@@ -13,16 +15,26 @@ import {
 } from './calc.js';
 import { $, h, storage, toast } from './dom.js';
 import { icon, tileTint } from './icons.js';
+import { pdfFileName, showPdf } from './pdf-share.js';
+import { session } from './session.js';
 
 const DRAFT_KEY = 'vw:draft:v1';
 const COST_TINT_OFFSET = 4;
 
-function loadDraft() {
-  const saved = storage.get(DRAFT_KEY);
-  const draft = { ...emptyDraft(), ...(saved && typeof saved === 'object' ? saved : {}) };
+// Fills in fields added in later versions, so older saved drafts still load.
+function normaliseDraft(input) {
+  const draft = { ...emptyDraft(), ...(input && typeof input === 'object' ? input : {}) };
   if (!draft.extras || typeof draft.extras !== 'object') draft.extras = {};
   if (!draft.costs || typeof draft.costs !== 'object') draft.costs = {};
+  draft.customer = { ...emptyDraft().customer, ...(draft.customer && typeof draft.customer === 'object' ? draft.customer : {}) };
+  if (draft.discountMode !== 'amount') draft.discountMode = 'percent';
   return draft;
+}
+
+function setBusy(button, busy, label) {
+  button.disabled = busy;
+  button.classList.toggle('is-busy', busy);
+  if (label) $('span', button).textContent = label;
 }
 
 function setInvalid(input, invalid) {
@@ -69,7 +81,7 @@ function totalRow(label, cents, grand = false) {
   return h('div', { class: grand ? 'grand' : '' }, h('span', {}, label), h('span', { class: 'num' }, formatMoney(cents)));
 }
 
-export function createCalculator() {
+export function createCalculator({ onQuoteSaved } = {}) {
   const form = $('#calcForm');
   const notice = $('#calcNotice');
   const materialSelect = $('#material');
@@ -86,17 +98,46 @@ export function createCalculator() {
   const dockGross = $('#dockGross');
   const sheet = $('#resultSheet');
   const resultContent = $('#resultContent');
-  const shareBtn = $('#shareBtn');
+  const discountInput = $('#discount');
+  const discountSuffix = $('#discountSuffix');
+  const discountSum = $('#discountSum');
+  const modeButtons = [...document.querySelectorAll('.segmented [data-mode]')];
+  const customerInputs = { name: $('#customerName'), phone: $('#customerPhone'), address: $('#customerAddress') };
+  const notesInput = $('#quoteNotes');
+  const pdfBtn = $('#pdfBtn');
+  const saveQuoteBtn = $('#saveQuoteBtn');
+  const textBtn = $('#textBtn');
 
   let config = null;
-  let draft = loadDraft();
+  let draft = normaliseDraft(storage.get(DRAFT_KEY));
   let quote = null;
   let extraRefs = new Map();
   let costRefs = new Map();
   let saveTimer;
+  let statusNotices = [];
+  let changedSinceSave = null; // message when a reopened quote no longer adds up the same
+
+  const scheduleSave = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => storage.set(DRAFT_KEY, draft), 250);
+  };
+  const hasContent = () => quote && quote.subtotalCents > 0;
 
   const currentMaterial = () =>
     config.materials.find((m) => m.id === draft.materialId) ?? config.materials[0] ?? null;
+
+  // Forget draft entries for items that were removed in Settings.
+  function reconcileDraft() {
+    const ids = (items) => new Set(items.map((item) => String(item.id)));
+    const extraIds = ids(config.extras);
+    const costIds = ids(config.costs);
+    for (const id of Object.keys(draft.extras)) if (!extraIds.has(id)) delete draft.extras[id];
+    for (const id of Object.keys(draft.costs)) if (!costIds.has(id)) delete draft.costs[id];
+    if (!config.materials.some((m) => m.id === draft.materialId)) {
+      draft.materialId = null;
+      if (!draft.quoteRef) draft.pricePerMeter = null;
+    }
+  }
 
   // ---------- Rendering ----------
   function render() {
@@ -110,6 +151,12 @@ export function createCalculator() {
     if (material) materialSelect.value = String(material.id);
     metersInput.value = draft.meters;
     ppmInput.value = draft.pricePerMeter ?? (material ? formatInput(material.price) : '');
+    discountInput.value = draft.discount ?? '';
+    syncDiscountMode();
+    for (const [field, input] of Object.entries(customerInputs)) input.value = draft.customer[field] ?? '';
+    notesInput.value = draft.notes ?? '';
+    renderNotice();
+    saveQuoteBtn.querySelector('span').textContent = draft.quoteRef ? 'Ενημέρωση' : 'Αποθήκευση';
 
     renderExtras();
     renderCosts();
@@ -178,6 +225,18 @@ export function createCalculator() {
       draft.other = otherInput.value;
       update();
     });
+    const otherLabel = h('input', {
+      class: 'other-label',
+      value: draft.otherLabel ?? '',
+      maxlength: '80',
+      placeholder: 'Περιγραφή, π.χ. φωτισμός LED',
+      'aria-label': 'Άλλο extra: περιγραφή',
+      enterkeyhint: 'next',
+    });
+    otherLabel.addEventListener('input', () => {
+      draft.otherLabel = otherLabel.value;
+      scheduleSave();
+    });
     const otherTotal = h('span', { class: 'extra-total' });
     const otherRow = h(
       'div',
@@ -186,7 +245,7 @@ export function createCalculator() {
       h(
         'div',
         { class: 'extra-bottom' },
-        h('span', { class: 'extra-hint' }, 'Οτιδήποτε άλλο, σε €'),
+        otherLabel,
         h('label', { class: 'amount-input input-wrap' }, otherInput, h('span', { class: 'suffix' }, '€')),
       ),
     );
@@ -265,6 +324,10 @@ export function createCalculator() {
     setInvalid(other.input, parseAmount(draft.other) === null);
     extrasSum.textContent = formatMoney(quote.extrasCents);
 
+    setInvalid(discountInput, parseAmount(draft.discount ?? '') === null || (draft.discountMode === 'percent' && quote.discountValue > 100));
+    discountSum.hidden = quote.discountCents === 0;
+    discountSum.textContent = `−${formatMoney(quote.discountCents)}`;
+
     for (const [id, input] of costRefs) setInvalid(input, parseAmount(draft.costs[id] ?? '') === null);
     profitStrip.replaceChildren(...profitStats(quote));
 
@@ -277,13 +340,59 @@ export function createCalculator() {
       quote.vatRate > 0 ? `με ΦΠΑ ${formatNumber(quote.vatRate)}%: ${formatMoney(quote.grossCents)}` : '';
 
     if (sheet.open) renderResult();
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => storage.set(DRAFT_KEY, draft), 250);
+    scheduleSave();
+  }
+
+  function syncDiscountMode() {
+    for (const button of modeButtons) button.setAttribute('aria-pressed', String(button.dataset.mode === draft.discountMode));
+    discountSuffix.textContent = draft.discountMode === 'amount' ? '€' : '%';
+  }
+
+  function renderNotice() {
+    const banner = draft.quoteRef
+      ? h(
+          'div',
+          { class: 'notice is-edit' },
+          icon('pencil'),
+          h(
+            'div',
+            {},
+            h('strong', {}, `Προσφορά ${draft.quoteRef.number}`),
+            draft.customer.name ? `${draft.customer.name}. ` : '',
+            'Οι αλλαγές αποθηκεύονται στην ίδια προσφορά.',
+            changedSinceSave && h('p', { class: 'form-error' }, changedSinceSave),
+            h('div', { class: 'notice-actions' }, h('button', { type: 'button', class: 'btn btn-soft', onclick: () => clearForm() }, icon('plus'), 'Νέα προσφορά')),
+          ),
+        )
+      : null;
+    notice.replaceChildren(...[banner, ...statusNotices].filter(Boolean));
+  }
+
+  function currentDoc() {
+    return buildQuoteDoc(quote, draft, { validityDays: config.settings.validityDays ?? 0 });
+  }
+
+  // The draft as stored with a saved quote: today's catalogue prices are written
+  // in, so reopening it later gives the same numbers even if Settings change.
+  function frozenDraft() {
+    const copy = structuredClone(draft);
+    delete copy.quoteRef;
+    const material = currentMaterial();
+    if (copy.pricePerMeter == null && material) copy.pricePerMeter = formatInput(material.price);
+    for (const extra of config.extras) {
+      const entry = copy.extras[extra.id];
+      if (entry && (parseQty(entry.qty) ?? 0) > 0 && entry.price == null) entry.price = formatInput(extra.price);
+    }
+    for (const cost of config.costs) {
+      if (copy.costs[cost.id] == null && cost.price) copy.costs[cost.id] = formatInput(cost.price);
+    }
+    return copy;
   }
 
   function renderResult() {
     const q = quote;
-    $('#resultDate').textContent = formatDate(new Date());
+    $('#resultTitle').textContent = draft.quoteRef ? `Προσφορά ${draft.quoteRef.number}` : 'Προσφορά';
+    $('#resultDate').textContent = [formatDate(new Date()), draft.customer.name.trim()].filter(Boolean).join(' · ');
     const vat = q.vatRate > 0;
 
     const parts = [
@@ -296,7 +405,7 @@ export function createCalculator() {
       ),
     ];
 
-    if (q.netCents === 0) {
+    if (q.subtotalCents === 0) {
       parts.push(h('p', { class: 'empty-hint' }, icon('info'), 'Συμπλήρωσε μέτρα ή extras για να βγει τιμή.'));
     } else {
       const segments = [
@@ -304,7 +413,7 @@ export function createCalculator() {
         ['Extras', q.pickedCents, 'var(--teal)'],
         ['Άλλο extra', q.otherCents, 'var(--violet)'],
       ].filter(([, cents]) => cents > 0);
-      const share = (cents) => formatPercent(cents / q.netCents);
+      const share = (cents) => formatPercent(cents / q.subtotalCents);
       parts.push(
         h(
           'div',
@@ -336,16 +445,22 @@ export function createCalculator() {
           lines.push(breakdownLine(extra.icon, tileTint(index), extra.name, `${extra.qty} × ${formatMoney(extra.unitCents)}`, extra.totalCents));
         }
       });
-      if (q.otherCents > 0) lines.push(breakdownLine('sparkles', 'var(--violet)', 'Άλλο extra', '', q.otherCents));
+      if (q.otherCents > 0) {
+        lines.push(breakdownLine('sparkles', 'var(--violet)', draft.otherLabel?.trim() || 'Άλλο extra', '', q.otherCents));
+      }
       parts.push(h('ul', { class: 'breakdown' }, lines));
 
+      const discountLabel = q.discountMode === 'percent' ? `Έκπτωση ${formatNumber(q.discountValue)}%` : 'Έκπτωση';
       parts.push(
         h(
           'div',
           { class: 'totals' },
+          q.discountCents > 0 && totalRow('Υποσύνολο', q.subtotalCents),
+          q.discountCents > 0 && totalRow(discountLabel, -q.discountCents),
           totalRow('Σύνολο χωρίς ΦΠΑ', q.netCents, !vat),
           vat && totalRow(`ΦΠΑ ${formatNumber(q.vatRate)}%`, q.vatCents),
           vat && totalRow('Σύνολο με ΦΠΑ', q.grossCents, true),
+          q.depositCents > 0 && totalRow(`Προκαταβολή ${formatNumber(q.depositPercent)}%`, q.depositCents),
         ),
       );
 
@@ -377,7 +492,9 @@ export function createCalculator() {
 
   // Select the whole number on focus so typing replaces it.
   form.addEventListener('focusin', (event) => {
-    if (event.target.matches('input[inputmode]')) setTimeout(() => event.target.select(), 0);
+    if (event.target.matches('input[inputmode="decimal"], input[inputmode="numeric"]')) {
+      setTimeout(() => event.target.select(), 0);
+    }
   });
 
   materialSelect.addEventListener('change', () => {
@@ -401,18 +518,45 @@ export function createCalculator() {
     ppmInput.focus();
   });
 
-  $('#clearBtn').addEventListener('click', () => {
+  // Starts a new quote (the current one stays in the archive if it was saved).
+  function clearForm() {
     const previous = structuredClone(draft);
+    const previousNote = changedSinceSave;
     draft = emptyDraft();
+    changedSinceSave = null;
     render();
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    toast('Η φόρμα καθάρισε.', {
+    toast('Νέα, άδεια προσφορά.', {
       actionLabel: 'Αναίρεση',
       onAction: () => {
         draft = previous;
+        changedSinceSave = previousNote;
         render();
       },
     });
+  }
+  $('#clearBtn').addEventListener('click', clearForm);
+
+  discountInput.addEventListener('input', () => {
+    draft.discount = discountInput.value;
+    update();
+  });
+  for (const button of modeButtons) {
+    button.addEventListener('click', () => {
+      draft.discountMode = button.dataset.mode;
+      syncDiscountMode();
+      update();
+    });
+  }
+  for (const [field, input] of Object.entries(customerInputs)) {
+    input.addEventListener('input', () => {
+      draft.customer[field] = input.value;
+      scheduleSave();
+    });
+  }
+  notesInput.addEventListener('input', () => {
+    draft.notes = notesInput.value;
+    scheduleSave();
   });
 
   $('#openResult').addEventListener('click', () => {
@@ -421,8 +565,6 @@ export function createCalculator() {
     renderResult();
     sheet.showModal();
   });
-
-  const shareText = () => buildShareText(quote, { businessName: config.settings.businessName });
 
   async function copyText(text) {
     try {
@@ -433,15 +575,82 @@ export function createCalculator() {
     }
   }
 
-  shareBtn.hidden = typeof navigator.share !== 'function';
-  shareBtn.addEventListener('click', async () => {
+  textBtn.addEventListener('click', async () => {
+    if (!hasContent()) return toast('Συμπλήρωσε μέτρα ή extras πρώτα.');
+    const text = buildShareText(currentDoc(), { businessName: config.settings.businessName });
+    if (typeof navigator.share !== 'function') return copyText(text);
     try {
-      await navigator.share({ title: 'Προσφορά κουζίνας', text: shareText() });
+      await navigator.share({ title: 'Προσφορά κουζίνας', text });
     } catch (error) {
-      if (error?.name !== 'AbortError') copyText(shareText());
+      if (error?.name !== 'AbortError') copyText(text);
     }
   });
-  $('#copyBtn').addEventListener('click', () => copyText(shareText()));
+
+  // Saves to the archive (new quote, or the one being edited). Needs a login.
+  async function saveQuote({ silent = false } = {}) {
+    if (!session.get().authenticated) {
+      toast('Συνδέσου για να αποθηκεύεις προσφορές.', {
+        actionLabel: 'Σύνδεση',
+        onAction: () => {
+          sheet.close();
+          location.hash = '#quotes';
+        },
+      });
+      return null;
+    }
+    const doc = currentDoc();
+    const body = { customer: doc.customer, doc, draft: frozenDraft(), costCents: quote.costCents };
+    try {
+      const saved = draft.quoteRef
+        ? await api('PUT', `/api/admin/quotes/${draft.quoteRef.id}`, body)
+        : await api('POST', '/api/admin/quotes', { ...body, status: 'draft' });
+      draft.quoteRef = { id: saved.id, number: saved.number };
+      changedSinceSave = null;
+      scheduleSave();
+      renderNotice();
+      saveQuoteBtn.querySelector('span').textContent = 'Ενημέρωση';
+      if (sheet.open) renderResult();
+      if (!silent) toast(`Αποθηκεύτηκε: Προσφορά ${saved.number}`);
+      onQuoteSaved?.(saved);
+      return saved;
+    } catch (error) {
+      if (error.status === 404 && draft.quoteRef) {
+        // Deleted on another device: save it again as a new quote.
+        draft.quoteRef = null;
+        return saveQuote({ silent });
+      }
+      if (error.status === 401) session.expired();
+      toast(error.status === 401 ? 'Η σύνδεση έληξε. Συνδέσου ξανά από τις Προσφορές.' : error.message, { tone: 'error' });
+      return null;
+    }
+  }
+
+  saveQuoteBtn.addEventListener('click', async () => {
+    if (!hasContent()) return toast('Συμπλήρωσε μέτρα ή extras πρώτα.');
+    setBusy(saveQuoteBtn, true);
+    await saveQuote();
+    setBusy(saveQuoteBtn, false);
+  });
+
+  pdfBtn.addEventListener('click', async () => {
+    if (!hasContent()) return toast('Συμπλήρωσε μέτρα ή extras πρώτα.');
+    setBusy(pdfBtn, true);
+    try {
+      let doc = currentDoc();
+      if (session.get().authenticated) {
+        const saved = await saveQuote({ silent: true });
+        if (saved) doc = saved.doc;
+      }
+      const { quotePdf } = await import('./pdf-quote.js');
+      const bytes = await quotePdf(doc, config.settings);
+      showPdf(bytes, pdfFileName('Prosfora', doc.number));
+    } catch (error) {
+      console.error(error);
+      toast('Δεν φτιάχτηκε το PDF. Δοκίμασε ξανά.', { tone: 'error' });
+    } finally {
+      setBusy(pdfBtn, false);
+    }
+  });
 
   // ---------- Public API ----------
   return {
@@ -452,19 +661,10 @@ export function createCalculator() {
 
     setConfig(next, { stale = false } = {}) {
       config = next;
-      // Forget draft entries for items that were removed in Settings.
-      const ids = (items) => new Set(items.map((item) => String(item.id)));
-      const extraIds = ids(config.extras);
-      const costIds = ids(config.costs);
-      for (const id of Object.keys(draft.extras)) if (!extraIds.has(id)) delete draft.extras[id];
-      for (const id of Object.keys(draft.costs)) if (!costIds.has(id)) delete draft.costs[id];
-      if (!config.materials.some((m) => m.id === draft.materialId)) {
-        draft.materialId = null;
-        draft.pricePerMeter = null;
-      }
+      reconcileDraft();
 
       form.hidden = false;
-      notice.replaceChildren(
+      statusNotices = [
         ...(stale
           ? [
               h(
@@ -485,9 +685,52 @@ export function createCalculator() {
                 h('div', {}, h('strong', {}, 'Δεν υπάρχουν υλικά'), 'Πρόσθεσε τουλάχιστον ένα υλικό από τις Ρυθμίσεις.'),
               ),
             ]),
-      );
+      ];
       render();
     },
+
+    // Opens a saved quote for editing, or as a new copy of it. Whatever was
+    // on the form can be brought back from the toast.
+    loadQuote(saved, { copy = false } = {}) {
+      const previous = structuredClone(draft);
+      const previousNote = changedSinceSave;
+      const replacesWork = hasContent() && previous.quoteRef?.id !== saved.id;
+
+      draft = normaliseDraft(saved.draft);
+      draft.quoteRef = copy ? null : { id: saved.id, number: saved.number };
+      reconcileDraft();
+      quote = computeQuote(config, draft);
+      changedSinceSave =
+        !copy && quote.netCents !== saved.netCents
+          ? `Τα σύνολα διαφέρουν από την αποθηκευμένη προσφορά (${formatMoney(saved.netCents)}), γιατί κάτι άλλαξε στις Ρυθμίσεις.`
+          : null;
+      render();
+      scheduleSave();
+
+      const restore = () => {
+        draft = previous;
+        changedSinceSave = previousNote;
+        render();
+        scheduleSave();
+      };
+      toast(
+        copy ? `Νέα προσφορά, αντίγραφο της ${saved.number}.` : `Άνοιξε η προσφορά ${saved.number}.`,
+        replacesWork ? { actionLabel: 'Αναίρεση', onAction: restore } : {},
+      );
+    },
+
+    // The quote being edited was deleted from the archive: keep the form, as a
+    // new unsaved quote.
+    forgetQuote(id) {
+      if (draft.quoteRef?.id !== id) return;
+      draft.quoteRef = null;
+      changedSinceSave = null;
+      saveQuoteBtn.querySelector('span').textContent = 'Αποθήκευση';
+      renderNotice();
+      scheduleSave();
+    },
+
+    settings: () => config?.settings,
 
     setUnavailable(error, retry) {
       form.hidden = true;

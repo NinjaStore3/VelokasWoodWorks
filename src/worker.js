@@ -1,7 +1,14 @@
 import { login, logout, requireAdmin, sessionStatus } from './auth.js';
 import { readConfig, writeConfig } from './config.js';
 import { HttpError, assertSameOrigin, json, readJson } from './http.js';
+import { createQuote, deleteQuote, getQuote, listQuotes, setQuoteStatus, updateQuote } from './quotes.js';
 import { ValidationError, validateConfig } from './validate.js';
+
+// Admin-only handlers: the session check runs before them.
+const admin = (handler) => async (request, env, params) => {
+  await requireAdmin(request, env);
+  return handler(request, env, params);
+};
 
 const routes = {
   '/api/config': {
@@ -17,30 +24,52 @@ const routes = {
     POST: (request, env) => logout(request, env),
   },
   '/api/admin/config': {
-    GET: async (request, env) => {
-      await requireAdmin(request, env);
-      return json(await readConfig(env.DB, { includeInactive: true }));
-    },
-    PUT: async (request, env) => {
-      await requireAdmin(request, env);
+    GET: admin(async (request, env) => json(await readConfig(env.DB, { includeInactive: true }))),
+    PUT: admin(async (request, env) => {
       const config = validateConfig(await readJson(request));
       await writeConfig(env.DB, config);
       return json(await readConfig(env.DB, { includeInactive: true }));
-    },
+    }),
+  },
+  '/api/admin/quotes': {
+    GET: admin((request, env) => listQuotes(env)),
+    POST: admin((request, env) => createQuote(request, env)),
   },
 };
 
+// Routes with an id in the path.
+const paramRoutes = [
+  {
+    pattern: /^\/api\/admin\/quotes\/([^/]+)$/,
+    methods: {
+      GET: admin((request, env, [id]) => getQuote(env, id)),
+      PUT: admin((request, env, [id]) => updateQuote(request, env, id)),
+      PATCH: admin((request, env, [id]) => setQuoteStatus(request, env, id)),
+      DELETE: admin((request, env, [id]) => deleteQuote(env, id)),
+    },
+  },
+];
+
+function findRoute(pathname) {
+  if (routes[pathname]) return { methods: routes[pathname], params: [] };
+  for (const { pattern, methods } of paramRoutes) {
+    const match = pathname.match(pattern);
+    if (match) return { methods, params: match.slice(1) };
+  }
+  return null;
+}
+
 async function handleApi(request, env) {
   const { pathname } = new URL(request.url);
-  const route = routes[pathname];
+  const route = findRoute(pathname);
   if (!route) throw new HttpError(404, 'Not found.');
 
-  const handler = route[request.method];
+  const handler = route.methods[request.method];
   if (!handler) {
-    throw new HttpError(405, 'Method not allowed.', { allow: Object.keys(route).join(', ') });
+    throw new HttpError(405, 'Method not allowed.', { allow: Object.keys(route.methods).join(', ') });
   }
   if (request.method !== 'GET') assertSameOrigin(request);
-  return handler(request, env);
+  return handler(request, env, route.params);
 }
 
 function errorResponse(error) {

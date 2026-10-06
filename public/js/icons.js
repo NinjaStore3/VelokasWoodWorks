@@ -51,10 +51,14 @@ export const PICKER_ICONS = [
 
 // Icons used by the interface itself.
 export const UI_ICONS = [
-  'arrow-down', 'arrow-up', 'calculator', 'check', 'chevron-down', 'circle-alert', 'circle-check',
-  'copy', 'eye-off', 'info', 'key-round', 'loader-circle', 'lock', 'log-out', 'minus', 'percent',
-  'piggy-bank', 'plus', 'receipt-euro', 'refresh-cw', 'rotate-ccw', 'save', 'settings', 'share-2',
-  'sliders-horizontal', 'trash-2', 'trending-down', 'trending-up', 'triangle-alert', 'undo-2', 'wallet', 'x',
+  'arrow-down', 'arrow-up', 'badge-check', 'badge-percent', 'building-2', 'calculator', 'calendar', 'check',
+  'chevron-down', 'circle-alert', 'circle-check', 'circle-x', 'clock', 'copy', 'copy-plus', 'download',
+  'external-link', 'eye-off', 'file-down', 'file-text', 'folder-open', 'hourglass', 'info', 'key-round',
+  'layout-grid', 'list-plus', 'loader-circle', 'lock', 'log-out', 'mail', 'map-pin', 'minus', 'notebook-pen',
+  'pencil', 'percent', 'phone', 'piggy-bank', 'plus', 'printer', 'receipt-euro', 'rectangle-horizontal',
+  'refresh-cw', 'rotate-ccw', 'rotate-cw', 'ruler-dimension-line', 'save', 'scissors', 'search', 'send',
+  'settings', 'share-2', 'sliders-horizontal', 'trash-2', 'trending-down', 'trending-up', 'triangle-alert',
+  'trophy', 'undo-2', 'user-round', 'wallet', 'wifi-off', 'x',
 ];
 
 const KNOWN = new Set([...PICKER_ICONS.map(([name]) => name), ...UI_ICONS]);
