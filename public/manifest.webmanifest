@@ -1,7 +1,8 @@
 {
-  "name": "Velokas Woodworks · Κοστολόγηση",
+  "id": "/",
+  "name": "Velokas Woodworks",
   "short_name": "Velokas",
-  "description": "Κοστολόγηση κουζίνας",
+  "description": "Κοστολόγηση κουζίνας, προσφορές σε PDF και βέλτιστη κοπή φύλλων.",
   "lang": "el",
   "start_url": "/",
   "scope": "/",
@@ -12,5 +13,10 @@
     { "src": "/img/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/img/icon-512.png", "sizes": "512x512", "type": "image/png" },
     { "src": "/img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Νέα κοστολόγηση", "short_name": "Κοστολόγηση", "url": "/#calc" },
+    { "name": "Προσφορές", "url": "/#quotes" },
+    { "name": "Κοπές φύλλων", "short_name": "Κοπές", "url": "/#cuts" }
   ]
 }

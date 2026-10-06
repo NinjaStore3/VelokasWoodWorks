@@ -63,7 +63,20 @@ export function formatDate(date) {
 }
 
 export function emptyDraft() {
-  return { meters: '', materialId: null, pricePerMeter: null, extras: {}, other: '', costs: {} };
+  return {
+    meters: '',
+    materialId: null,
+    pricePerMeter: null,
+    extras: {},
+    other: '',
+    otherLabel: '',
+    discount: '',
+    discountMode: 'percent', // or 'amount'
+    customer: { name: '', phone: '', address: '' },
+    notes: '',
+    costs: {},
+    quoteRef: null, // { id, number } once saved to the archive
+  };
 }
 
 // The whole quote, derived from the admin config plus what's typed in the
@@ -89,9 +102,20 @@ export function computeQuote(config, draft) {
   const pickedCents = extras.reduce((sum, extra) => sum + extra.totalCents, 0);
   const extrasCents = pickedCents + otherCents;
 
-  const netCents = baseCents + extrasCents;
-  const vatRate = config.settings.vatRate ?? 0;
-  const vatCents = Math.round((netCents * vatRate) / 100);
+  const subtotalCents = baseCents + extrasCents;
+  const discountValue = parseAmount(draft.discount ?? '') ?? 0;
+  const discountCents =
+    draft.discountMode === 'amount'
+      ? Math.min(subtotalCents, toCents(discountValue))
+      : Math.round((subtotalCents * Math.min(discountValue, 100)) / 100);
+
+  const settings = config.settings;
+  const totals = docTotals({
+    subtotalCents,
+    discountCents,
+    vatRate: settings.vatRate ?? 0,
+    depositPercent: settings.depositPercent ?? 0,
+  });
 
   const costs = config.costs.map((cost) => {
     const raw = draft.costs[cost.id];
@@ -99,7 +123,7 @@ export function computeQuote(config, draft) {
     return { id: cost.id, name: cost.name, icon: cost.icon, cents: toCents(amount) };
   });
   const costCents = costs.reduce((sum, cost) => sum + cost.cents, 0);
-  const profitCents = netCents - costCents;
+  const profitCents = totals.netCents - costCents;
 
   return {
     material,
@@ -110,37 +134,139 @@ export function computeQuote(config, draft) {
     pickedCents,
     otherCents,
     extrasCents,
-    netCents,
-    vatRate,
-    vatCents,
-    grossCents: netCents + vatCents,
+    discountMode: draft.discountMode === 'amount' ? 'amount' : 'percent',
+    discountValue,
+    ...totals,
+    vatRate: settings.vatRate ?? 0,
+    depositPercent: settings.depositPercent ?? 0,
     costs,
     costCents,
     profitCents,
-    margin: netCents > 0 ? profitCents / netCents : null,
+    margin: totals.netCents > 0 ? profitCents / totals.netCents : null,
   };
 }
 
-// Plain-text quote for Viber / Messenger / email. Never includes internal costs.
-export function buildShareText(quote, { businessName, date = new Date() }) {
-  const lines = [`${businessName} · Προσφορά κουζίνας`, formatDate(date), ''];
+// Totals from a subtotal (or from quote lines). Shared with the Worker, which
+// recomputes saved quotes so stored totals always add up.
+export function docTotals({ lines, subtotalCents, discountCents = 0, vatRate = 0, depositPercent = 0 }) {
+  const subtotal = subtotalCents ?? lines.reduce((sum, line) => sum + line.totalCents, 0);
+  const discount = Math.min(Math.max(0, discountCents), subtotal);
+  const netCents = subtotal - discount;
+  const vatCents = Math.round((netCents * vatRate) / 100);
+  const grossCents = netCents + vatCents;
+  return {
+    subtotalCents: subtotal,
+    discountCents: discount,
+    netCents,
+    vatCents,
+    grossCents,
+    depositCents: Math.round((grossCents * depositPercent) / 100),
+  };
+}
+
+export function lineTotal(line) {
+  return Math.round(line.qty * line.unitCents);
+}
+
+export function addDays(date, days) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+// The customer-facing quote: what the PDF, the shared text and the archive
+// show. Never contains internal costs.
+export function buildQuoteDoc(quote, draft, { date = new Date(), validityDays = 0 } = {}) {
+  const lines = [];
   if (quote.baseCents > 0) {
-    const material = quote.material ? ` (${quote.material.name})` : '';
-    lines.push(
-      `Βασική κουζίνα${material}: ${formatNumber(quote.meters)} μ. × ${formatMoney(quote.pricePerMeterCents)} = ${formatMoney(quote.baseCents)}`,
-    );
+    lines.push({
+      kind: 'base',
+      name: 'Βασική κουζίνα',
+      detail: quote.material?.name ?? '',
+      qty: quote.meters,
+      unit: 'μ.',
+      unitCents: quote.pricePerMeterCents,
+      totalCents: quote.baseCents,
+    });
   }
   for (const extra of quote.extras) {
     if (extra.qty > 0) {
-      lines.push(`• ${extra.name}: ${extra.qty} × ${formatMoney(extra.unitCents)} = ${formatMoney(extra.totalCents)}`);
+      lines.push({
+        kind: 'extra',
+        name: extra.name,
+        detail: '',
+        qty: extra.qty,
+        unit: 'τεμ.',
+        unitCents: extra.unitCents,
+        totalCents: extra.totalCents,
+      });
     }
   }
-  if (quote.otherCents > 0) lines.push(`• Άλλο extra: ${formatMoney(quote.otherCents)}`);
-
-  lines.push('', `Σύνολο χωρίς ΦΠΑ: ${formatMoney(quote.netCents)}`);
-  if (quote.vatRate > 0) {
-    lines.push(`ΦΠΑ ${formatNumber(quote.vatRate)}%: ${formatMoney(quote.vatCents)}`);
-    lines.push(`Σύνολο με ΦΠΑ: ${formatMoney(quote.grossCents)}`);
+  if (quote.otherCents > 0) {
+    lines.push({
+      kind: 'other',
+      name: draft.otherLabel?.trim() || 'Άλλο extra',
+      detail: '',
+      qty: 1,
+      unit: '',
+      unitCents: quote.otherCents,
+      totalCents: quote.otherCents,
+    });
   }
-  return lines.join('\n');
+
+  const customer = draft.customer ?? {};
+  return {
+    v: 1,
+    number: draft.quoteRef?.number ?? null,
+    date: date.toISOString(),
+    validityDays,
+    customer: {
+      name: (customer.name ?? '').trim(),
+      phone: (customer.phone ?? '').trim(),
+      address: (customer.address ?? '').trim(),
+    },
+    lines,
+    discountLabel: quote.discountCents > 0 && quote.discountMode === 'percent' ? `${formatNumber(quote.discountValue)}%` : '',
+    discountCents: quote.discountCents,
+    vatRate: quote.vatRate,
+    depositPercent: quote.depositPercent,
+    notes: (draft.notes ?? '').trim(),
+    ...docTotals({ lines, discountCents: quote.discountCents, vatRate: quote.vatRate, depositPercent: quote.depositPercent }),
+  };
+}
+
+function lineText(line) {
+  if (line.kind === 'base') {
+    const material = line.detail ? ` (${line.detail})` : '';
+    return `${line.name}${material}: ${formatNumber(line.qty)} μ. × ${formatMoney(line.unitCents)} = ${formatMoney(line.totalCents)}`;
+  }
+  if (line.kind === 'other') return `• ${line.name}: ${formatMoney(line.totalCents)}`;
+  return `• ${line.name}: ${line.qty} × ${formatMoney(line.unitCents)} = ${formatMoney(line.totalCents)}`;
+}
+
+// Plain-text quote for Viber / Messenger / email. Never includes internal costs.
+export function buildShareText(doc, { businessName }) {
+  const date = new Date(doc.date);
+  const title = doc.number ? `Προσφορά ${doc.number}` : 'Προσφορά κουζίνας';
+  const out = [`${businessName} · ${title}`, formatDate(date)];
+  if (doc.customer.name) out.push(`Προς: ${doc.customer.name}`);
+  out.push('');
+  for (const line of doc.lines) out.push(lineText(line));
+
+  out.push('');
+  if (doc.discountCents > 0) {
+    out.push(`Υποσύνολο: ${formatMoney(doc.subtotalCents)}`);
+    out.push(`Έκπτωση${doc.discountLabel ? ` ${doc.discountLabel}` : ''}: -${formatMoney(doc.discountCents)}`);
+  }
+  out.push(`Σύνολο χωρίς ΦΠΑ: ${formatMoney(doc.netCents)}`);
+  if (doc.vatRate > 0) {
+    out.push(`ΦΠΑ ${formatNumber(doc.vatRate)}%: ${formatMoney(doc.vatCents)}`);
+    out.push(`Σύνολο με ΦΠΑ: ${formatMoney(doc.grossCents)}`);
+  }
+  if (doc.depositCents > 0) {
+    out.push(`Προκαταβολή ${formatNumber(doc.depositPercent)}%: ${formatMoney(doc.depositCents)}`);
+  }
+  if (doc.validityDays > 0) out.push('', `Ισχύει έως ${formatDate(addDays(date, doc.validityDays))}.`);
+  if (doc.notes) out.push('', doc.notes);
+  return out.join('\n');
 }

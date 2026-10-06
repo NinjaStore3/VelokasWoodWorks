@@ -38,6 +38,11 @@ export function toast(message, { tone, actionLabel, onAction, duration } = {}) {
       }
     : null;
 
+  // An open sheet makes the rest of the page inert, so the toast goes inside
+  // it to keep its button tappable.
+  const host = [...document.querySelectorAll('dialog[open]')].pop() ?? document.body;
+  if (el.parentElement !== host) host.append(el);
+
   el.hidden = false;
   el.style.animation = 'none';
   void el.offsetWidth; // restart the entrance animation
@@ -50,6 +55,11 @@ export function toast(message, { tone, actionLabel, onAction, duration } = {}) {
 export function setupSheet(dialog) {
   dialog.addEventListener('click', (event) => {
     if (event.target === dialog || event.target.closest('[data-close]')) dialog.close();
+  });
+  // A toast shown inside the sheet stays on screen after it closes.
+  dialog.addEventListener('close', () => {
+    const el = $('#toast');
+    if (dialog.contains(el)) document.body.append(el);
   });
 }
 

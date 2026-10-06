@@ -4,8 +4,30 @@ const DEFAULT_SETTINGS = {
   business_name: 'Velokas Woodworks',
   subtitle: '',
   vat_rate: '24',
+  business_phone: '',
+  business_email: '',
+  business_address: '',
+  business_vat_id: '',
+  quote_terms: '',
+  quote_validity_days: '30',
+  deposit_percent: '0',
   config_version: '0',
 };
+
+// API field -> settings table key.
+const SETTING_KEYS = {
+  businessName: 'business_name',
+  subtitle: 'subtitle',
+  vatRate: 'vat_rate',
+  phone: 'business_phone',
+  email: 'business_email',
+  address: 'business_address',
+  vatId: 'business_vat_id',
+  terms: 'quote_terms',
+  validityDays: 'quote_validity_days',
+  depositPercent: 'deposit_percent',
+};
+const NUMERIC_SETTINGS = new Set(['vatRate', 'validityDays', 'depositPercent']);
 
 const LIST_BY_KIND = { material: 'materials', extra: 'extras', cost: 'costs' };
 
@@ -26,11 +48,12 @@ export async function readConfig(db, { includeInactive = false } = {}) {
 
   const config = {
     version: Number(settings.config_version) || 0,
-    settings: {
-      businessName: settings.business_name,
-      subtitle: settings.subtitle,
-      vatRate: Number(settings.vat_rate) || 0,
-    },
+    settings: Object.fromEntries(
+      Object.entries(SETTING_KEYS).map(([field, key]) => [
+        field,
+        NUMERIC_SETTINGS.has(field) ? Number(settings[key]) || 0 : settings[key],
+      ]),
+    ),
     materials: [],
     extras: [],
     costs: [],
@@ -63,13 +86,15 @@ export async function writeConfig(db, config) {
     'INSERT INTO items (id, kind, name, price_cents, icon, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?)',
   );
 
-  const statements = [
-    upsertSetting.bind('business_name', config.settings.businessName),
-    upsertSetting.bind('subtitle', config.settings.subtitle),
-    upsertSetting.bind('vat_rate', String(config.settings.vatRate)),
+  const statements = [];
+  for (const [field, key] of Object.entries(SETTING_KEYS)) {
+    const value = config.settings[field];
+    if (value !== undefined) statements.push(upsertSetting.bind(key, String(value)));
+  }
+  statements.push(
     upsertSetting.bind('config_version', String(config.version + 1)),
     db.prepare('DELETE FROM items'),
-  ];
+  );
 
   for (const [kind, key] of Object.entries(LIST_BY_KIND)) {
     config[key].forEach((item, index) => {

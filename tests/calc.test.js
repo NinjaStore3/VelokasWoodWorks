@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  buildQuoteDoc,
   buildShareText,
   computeQuote,
   emptyDraft,
@@ -112,18 +113,83 @@ test('computeQuote rounds VAT to the cent', () => {
   assert.equal(quote.vatCents, 2963); // 2962.8 → 2963
 });
 
-test('buildShareText lists the quote but never internal costs', () => {
-  const quote = computeQuote(
-    config,
-    draft({ meters: '4,6', extras: { 3: { qty: '2', price: null } }, other: '150', costs: { 10: '999' } }),
+test('discounts are a percentage or an amount, never more than the subtotal', () => {
+  const percent = computeQuote(config, draft({ other: '1000', discount: '12,5' }));
+  assert.equal(percent.discountCents, 12500);
+  assert.equal(percent.netCents, 87500);
+  assert.equal(percent.vatCents, 21000);
+
+  const amount = computeQuote(config, draft({ other: '1000', discount: '150', discountMode: 'amount' }));
+  assert.equal(amount.discountCents, 15000);
+  assert.equal(amount.netCents, 85000);
+
+  assert.equal(computeQuote(config, draft({ other: '100', discount: '500', discountMode: 'amount' })).netCents, 0);
+  assert.equal(computeQuote(config, draft({ other: '100', discount: '150' })).netCents, 0);
+  assert.equal(computeQuote(config, draft({ other: '100', discount: 'abc' })).discountCents, 0);
+});
+
+test('the quote document carries what the customer sees, and no internal costs', () => {
+  const withDeposit = { ...config, settings: { ...config.settings, depositPercent: 40 } };
+  const input = draft({
+    meters: '4,6',
+    extras: { 3: { qty: '2', price: null } },
+    other: '150',
+    otherLabel: ' Φωτισμός LED ',
+    discount: '10',
+    customer: { name: ' Μαρία ', phone: '', address: 'Χαλάνδρι' },
+    notes: 'Λευκό ματ.',
+    costs: { 10: '999' },
+    quoteRef: { id: 4, number: '2026-004' },
+  });
+  const doc = buildQuoteDoc(computeQuote(withDeposit, input), input, { date: new Date(2026, 9, 6, 12), validityDays: 30 });
+
+  assert.equal(doc.number, '2026-004');
+  assert.deepEqual(doc.customer, { name: 'Μαρία', phone: '', address: 'Χαλάνδρι' });
+  assert.deepEqual(
+    doc.lines.map((line) => [line.kind, line.name, line.detail, line.qty, line.unit, line.unitCents, line.totalCents]),
+    [
+      ['base', 'Βασική κουζίνα', 'Μελαμίνη', 4.6, 'μ.', 32000, 147200],
+      ['extra', 'Μπουκαλοθήκη', '', 2, 'τεμ.', 8000, 16000],
+      ['other', 'Φωτισμός LED', '', 1, '', 15000, 15000],
+    ],
   );
-  const text = buildShareText(quote, { businessName: 'Velokas Woodworks', date: new Date(2026, 9, 6) });
-  assert.match(text, /^Velokas Woodworks · Προσφορά κουζίνας\n6 Οκτωβρίου 2026/);
+  assert.equal(doc.subtotalCents, 178200);
+  assert.equal(doc.discountLabel, '10%');
+  assert.equal(doc.discountCents, 17820);
+  assert.equal(doc.netCents, 160380);
+  assert.equal(doc.vatCents, 38491); // 38491.2
+  assert.equal(doc.grossCents, 198871);
+  assert.equal(doc.depositCents, 79548); // 40% of the total with VAT
+  for (const key of Object.keys(doc)) assert.doesNotMatch(key, /cost|profit|margin/i);
+
+  const text = buildShareText(doc, { businessName: 'Velokas Woodworks' });
+  assert.match(text, /^Velokas Woodworks · Προσφορά 2026-004\n6 Οκτωβρίου 2026\nΠρος: Μαρία\n/);
   assert.match(text, /Βασική κουζίνα \(Μελαμίνη\): 4,6 μ\. × 320 € = 1\.472 €/);
   assert.match(text, /• Μπουκαλοθήκη: 2 × 80 € = 160 €/);
-  assert.match(text, /• Άλλο extra: 150 €/);
-  assert.match(text, /Σύνολο χωρίς ΦΠΑ: 1\.782 €/);
-  assert.match(text, /ΦΠΑ 24%: 427,68 €/);
-  assert.match(text, /Σύνολο με ΦΠΑ: 2\.209,68 €/);
+  assert.match(text, /• Φωτισμός LED: 150 €/);
+  assert.match(text, /Υποσύνολο: 1\.782 €\nΈκπτωση 10%: -178,20 €\nΣύνολο χωρίς ΦΠΑ: 1\.603,80 €/);
+  assert.match(text, /ΦΠΑ 24%: 384,91 €\nΣύνολο με ΦΠΑ: 1\.988,71 €\nΠροκαταβολή 40%: 795,48 €/);
+  assert.match(text, /Ισχύει έως 5 Νοεμβρίου 2026\./);
+  assert.match(text, /Λευκό ματ\.$/);
   assert.doesNotMatch(text, /999|Πορτάκια|Κέρδος/);
+});
+
+test('an unsaved quote with nothing optional reads simply', () => {
+  const input = draft({ other: '80' });
+  const doc = buildQuoteDoc(computeQuote(config, input), input, { date: new Date(2026, 0, 2, 12) });
+  assert.equal(doc.number, null);
+  const text = buildShareText(doc, { businessName: 'Velokas Woodworks' });
+  assert.equal(
+    text,
+    [
+      'Velokas Woodworks · Προσφορά κουζίνας',
+      '2 Ιανουαρίου 2026',
+      '',
+      '• Άλλο extra: 80 €',
+      '',
+      'Σύνολο χωρίς ΦΠΑ: 80 €',
+      'ΦΠΑ 24%: 19,20 €',
+      'Σύνολο με ΦΠΑ: 99,20 €',
+    ].join('\n'),
+  );
 });
