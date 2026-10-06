@@ -455,7 +455,7 @@ input[aria-invalid="true"] {
 }
 .extra.is-on .tile {
   color: #fff;
-  background: linear-gradient(140deg, color-mix(in srgb, var(--tint) 75%, white), var(--tint));
+  background: linear-gradient(140deg, var(--tint), color-mix(in srgb, var(--tint) 78%, black));
   box-shadow: 0 6px 14px -6px var(--tint);
 }
 
