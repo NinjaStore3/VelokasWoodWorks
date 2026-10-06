@@ -1,0 +1,26 @@
+{
+  "name": "velokas-woodworks",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kitchen cost calculator for Velokas Woodworks (Cloudflare Workers + D1)",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy && wrangler d1 migrations apply DB --remote",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "test": "node --test \"tests/*.test.js\"",
+    "test:unit": "node --test tests/calc.test.js tests/validate.test.js",
+    "icons": "node scripts/build-icons.mjs"
+  },
+  "devDependencies": {
+    "lucide-static": "^1.52.0",
+    "wrangler": "^4.147.0"
+  },
+  "overrides": {
+    "sharp": "0.35.5"
+  }
+}
