@@ -36,38 +36,42 @@ profit = total − internal costs   (margin = profit ÷ total)
 
 The database starts with the values from the mockup. Only «Μελαμίνη — 320 €» was visible in the material dropdown, so add the other finishes in **Ρυθμίσεις**.
 
-## Deploy (first time)
+## Deploy
 
-You need [Node.js](https://nodejs.org) 20 or newer and a free Cloudflare account.
+Every push to `main` runs the tests and deploys through GitHub Actions (`.github/workflows/deploy.yml`). Setup takes a phone browser and a free Cloudflare account; no computer is needed.
 
-```bash
-git clone https://github.com/NinjaStore3/VelokasWoodWorks.git
-cd VelokasWoodWorks
-npm install
+1. **Cloudflare account.** Sign in at [dash.cloudflare.com](https://dash.cloudflare.com) and open **Workers & Pages** once. If it asks for a `workers.dev` subdomain, pick one; it becomes part of the app's address.
+2. **Account ID.** Copy it from the **Account details** box on the Workers & Pages page. It's also the long code in the address bar right after `dash.cloudflare.com/`.
+3. **API token.** Go to [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens) → **Create Token** → **Edit Cloudflare Workers** → **Use template**.
+   - Under Permissions, choose **+ Add more** and add **Account · D1 · Edit**.
+   - Set Account Resources to your account and Zone Resources to **All zones**.
+   - Choose **Continue to summary** → **Create Token** and copy the token.
+4. **GitHub secrets.** Add three repository secrets at [Settings → Secrets and variables → Actions](https://github.com/NinjaStore3/VelokasWoodWorks/settings/secrets/actions/new). On a phone, use the browser rather than the GitHub app.
 
-npx wrangler login                     # opens the browser to authorise Wrangler
-npm run deploy                         # creates the database, deploys, sets up the tables
-npx wrangler secret put ADMIN_PASSWORD # choose the Settings password
-```
+   | Name | Value |
+   | --- | --- |
+   | `CLOUDFLARE_API_TOKEN` | the token from step 3 |
+   | `CLOUDFLARE_ACCOUNT_ID` | the ID from step 2 |
+   | `ADMIN_PASSWORD` | the password for the Settings tab; use a long one |
 
-- `npm run deploy` creates a D1 database called `velokas-db` the first time and links it to the Worker. If Wrangler asks about creating the database or a `workers.dev` subdomain, accept. It may write the new `database_id` into `wrangler.jsonc`; commit that change.
-- The app is then live at `https://velokas-woodworks.<your-subdomain>.workers.dev`. For your own domain, go to Worker → Settings → Domains & Routes.
-- The password can also be set in the dashboard: **Workers & Pages → velokas-woodworks → Settings → Variables and Secrets → Add → Secret**, named `ADMIN_PASSWORD`. Use a long one; the Settings tab is reachable by anyone who has the link.
+5. **Run it.** Open **Actions → Test and deploy → Run workflow**, or push to `main`.
+   - The first run creates the `velokas-db` database, deploys the app and fills the database with the starting prices.
+   - The run's summary page shows the link, `https://velokas-woodworks.<your-subdomain>.workers.dev`.
+
+To change the Settings password later, update the `ADMIN_PASSWORD` secret and run the workflow again. That also signs every device out. For your own domain, go to Worker → Settings → Domains & Routes in Cloudflare.
 
 On Panos's phone, open the link and choose **Add to Home screen** (Chrome menu, or Safari's Share button). It gets its own app icon and opens full screen.
 
-### Updating
+### Deploying from a computer instead
+
+With [Node.js](https://nodejs.org) 20 or newer:
 
 ```bash
-git pull
-npm run deploy
+npm install
+npx wrangler login                     # opens the browser to authorise Wrangler
+npm run deploy                         # deploys, then applies database migrations
+npx wrangler secret put ADMIN_PASSWORD # first time only
 ```
-
-`npm run deploy` deploys the code and then applies any new files in `migrations/`.
-
-### Optional: deploy automatically on every push
-
-In the Cloudflare dashboard: **Workers & Pages → velokas-woodworks → Settings → Build → Connect** to this GitHub repository, and set the deploy command to `npm run deploy`. The token Cloudflare generates for builds has no D1 permission by default. Give it **Account · D1 · Edit** under **My Profile → API Tokens**, or select your own token in the build settings. Without that permission, migrations can't run during the build.
 
 ## Local development
 
@@ -122,14 +126,14 @@ Prices are stored as integer cents. Saving sends the version the editor loaded; 
 
 ### Changing the database
 
-Add a new numbered file such as `migrations/0002_add_quotes.sql`, try it locally with `npm run db:migrate:local`, then run `npm run deploy`.
+Add a new numbered file such as `migrations/0002_add_quotes.sql`, try it locally with `npm run db:migrate:local`, then push to `main`. The deploy applies it after the new code goes live.
 
 ## Security
 
 - Admin sessions use a random token in an `HttpOnly; Secure; SameSite=Strict` cookie, valid for 30 days. Only a SHA-256 hash of the token is stored.
 - After 10 wrong passwords from one IP within 15 minutes, logins are refused.
 - State-changing requests must be same-origin JSON. Static files get a strict Content Security Policy.
-- To change the password, set the secret again. This signs every device out.
+- To change the password, update the `ADMIN_PASSWORD` secret and redeploy. This signs every device out.
 
 ## Free tier
 
