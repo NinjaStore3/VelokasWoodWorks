@@ -3,6 +3,7 @@ import { createCalculator } from './calculator.js';
 import { createCuts } from './cuts.js';
 import { $, setupSheet, toast } from './dom.js';
 import { setupPdfSheet } from './pdf-share.js';
+import { setupPwa } from './pwa.js';
 import { createQuotes } from './quotes.js';
 import { session } from './session.js';
 import { createSettings } from './settings.js';
@@ -94,6 +95,7 @@ async function boot() {
 
 document.querySelectorAll('dialog.sheet').forEach(setupSheet);
 setupPdfSheet();
+setupPwa();
 
 window.addEventListener('hashchange', () => showTab(currentTab()));
 // Tapping the tab you're on scrolls back to the top.
