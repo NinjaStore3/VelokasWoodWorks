@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Κοστολόγηση Κουζίνας · Velokas Woodworks</title>
+  <meta name="description" content="Γρήγορη κοστολόγηση κουζίνας για τη Velokas Woodworks.">
+  <meta name="theme-color" content="#2E1C12">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Velokas">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+  <link rel="preload" href="/fonts/manrope-greek-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/manrope-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/app.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="brand">
+        <img class="brand-mark" src="/img/logo.svg" alt="" width="44" height="44">
+        <span class="brand-name" data-bind="businessName">Velokas Woodworks</span>
+      </div>
+      <h1 class="hero-title" id="pageTitle">Κοστολόγηση Κουζίνας</h1>
+      <p class="hero-sub" id="pageSubtitle" data-bind="subtitle">Τιμές χωρίς ΦΠΑ • βάση με τα δικά σου σημερινά δεδομένα</p>
+      <nav class="tabs" aria-label="Ενότητες">
+        <a class="tab" href="#calc" id="tab-calc" aria-current="page">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#calculator"></use></svg>
+          Κοστολόγηση
+        </a>
+        <a class="tab" href="#settings" id="tab-settings">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#settings"></use></svg>
+          Ρυθμίσεις
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="content">
+    <noscript><p class="notice">Η εφαρμογή χρειάζεται JavaScript.</p></noscript>
+    <!-- Calculator -->
+    <section id="view-calc" class="view" aria-label="Κοστολόγηση">
+      <div id="calcNotice"></div>
+
+      <form id="calcForm" class="stack" autocomplete="off" novalidate hidden>
+        <!-- 1. Base kitchen -->
+        <section class="card" data-accent="amber" aria-labelledby="baseTitle">
+          <header class="card-head">
+            <span class="badge-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#ruler"></use></svg></span>
+            <div class="card-titles">
+              <p class="eyebrow">Βήμα 1</p>
+              <h2 id="baseTitle">Βασική κουζίνα</h2>
+            </div>
+            <output class="card-sum" id="baseSum" aria-label="Υποσύνολο βασικής κουζίνας">0 €</output>
+          </header>
+
+          <div class="field">
+            <label for="material">Υλικό</label>
+            <div class="select-wrap">
+              <select id="material" name="material"></select>
+              <svg class="icon select-chev" aria-hidden="true"><use href="/icons.svg#chevron-down"></use></svg>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="meters">Μέτρα</label>
+              <div class="input-wrap">
+                <input id="meters" name="meters" inputmode="decimal" placeholder="π.χ. 5" enterkeyhint="next">
+                <span class="suffix">μ.</span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="pricePerMeter">Τιμή / μέτρο</label>
+              <div class="input-wrap">
+                <input id="pricePerMeter" name="pricePerMeter" inputmode="decimal" enterkeyhint="done">
+                <span class="suffix">€</span>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="link-btn" id="resetPpm" hidden>
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#undo-2"></use></svg>
+            <span></span>
+          </button>
+
+          <p class="formula" id="baseFormula" aria-live="polite"></p>
+        </section>
+
+        <!-- 2. Extras -->
+        <section class="card" data-accent="teal" aria-labelledby="extrasTitle">
+          <header class="card-head">
+            <span class="badge-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#sparkles"></use></svg></span>
+            <div class="card-titles">
+              <p class="eyebrow">Βήμα 2</p>
+              <h2 id="extrasTitle">Extras</h2>
+            </div>
+            <output class="card-sum" id="extrasSum" aria-label="Υποσύνολο extras">0 €</output>
+          </header>
+          <div class="extras" id="extrasList"></div>
+        </section>
+
+        <!-- 3. Internal costing (optional, never shared) -->
+        <details class="card card-collapsible" data-accent="violet" id="costCard">
+          <summary class="card-head">
+            <span class="badge-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#piggy-bank"></use></svg></span>
+            <div class="card-titles">
+              <p class="eyebrow">Βήμα 3 · προαιρετικό</p>
+              <h2>Εσωτερική κοστολόγηση</h2>
+            </div>
+            <svg class="icon card-chev" aria-hidden="true"><use href="/icons.svg#chevron-down"></use></svg>
+          </summary>
+          <p class="private-note">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#eye-off"></use></svg>
+            Μόνο για σένα. Δεν εμφανίζεται στην προσφορά που στέλνεις.
+          </p>
+          <div class="costs" id="costsList"></div>
+          <div class="profit-strip" id="profitStrip"></div>
+        </details>
+
+        <button type="button" class="btn btn-ghost btn-block" id="clearBtn">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-ccw"></use></svg>
+          Καθαρισμός
+        </button>
+      </form>
+    </section>
+
+    <!-- Settings (admin) -->
+    <section id="view-settings" class="view" aria-label="Ρυθμίσεις" hidden>
+      <div id="settingsRoot" class="stack"></div>
+    </section>
+  </main>
+
+  <!-- Sticky total for the calculator -->
+  <div class="dock" id="totalDock">
+    <div class="dock-inner">
+      <div class="dock-sum">
+        <span class="dock-label">Σύνολο χωρίς ΦΠΑ</span>
+        <output class="dock-amount" id="dockNet" aria-live="polite">0 €</output>
+        <span class="dock-sub" id="dockGross"></span>
+      </div>
+      <button type="button" class="btn btn-cta" id="openResult">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#receipt-euro"></use></svg>
+        Προσφορά
+      </button>
+    </div>
+  </div>
+
+  <!-- Sticky save bar for settings -->
+  <div class="dock dock-save" id="saveDock" hidden>
+    <div class="dock-inner">
+      <div class="dock-sum">
+        <span class="dock-label">Έχεις αλλαγές</span>
+        <button type="button" class="link-btn link-btn-light" id="discardBtn">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#undo-2"></use></svg>
+          Αναίρεση
+        </button>
+      </div>
+      <button type="button" class="btn btn-cta" id="saveBtn">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#save"></use></svg>
+        Αποθήκευση
+      </button>
+    </div>
+  </div>
+
+  <!-- Quote result -->
+  <dialog class="sheet" id="resultSheet" aria-labelledby="resultTitle">
+    <div class="sheet-body">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <header class="sheet-head">
+        <div>
+          <h2 id="resultTitle">Προσφορά</h2>
+          <p class="sheet-meta" id="resultDate"></p>
+        </div>
+        <button type="button" class="icon-btn" data-close aria-label="Κλείσιμο">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"></use></svg>
+        </button>
+      </header>
+      <div id="resultContent"></div>
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-cta" id="shareBtn">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#share-2"></use></svg>
+          Αποστολή
+        </button>
+        <button type="button" class="btn btn-soft" id="copyBtn">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#copy"></use></svg>
+          Αντιγραφή
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Icon picker for settings -->
+  <dialog class="sheet" id="iconSheet" aria-labelledby="iconSheetTitle">
+    <div class="sheet-body">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <header class="sheet-head">
+        <h2 id="iconSheetTitle">Διάλεξε εικονίδιο</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Κλείσιμο">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#x"></use></svg>
+        </button>
+      </header>
+      <div class="icon-grid" id="iconGrid"></div>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <span class="toast-text"></span>
+    <button type="button" class="toast-action" hidden></button>
+  </div>
+</body>
+</html>

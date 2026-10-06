@@ -1,0 +1,83 @@
+import { HttpError } from './http.js';
+
+const DEFAULT_SETTINGS = {
+  business_name: 'Velokas Woodworks',
+  subtitle: '',
+  vat_rate: '24',
+  config_version: '0',
+};
+
+const LIST_BY_KIND = { material: 'materials', extra: 'extras', cost: 'costs' };
+
+// Reads everything the calculator needs. Admins also get inactive items.
+export async function readConfig(db, { includeInactive = false } = {}) {
+  const [settingsResult, itemsResult] = await db.batch([
+    db.prepare('SELECT key, value FROM settings'),
+    db.prepare(
+      `SELECT id, kind, name, price_cents, icon, active
+         FROM items
+        ${includeInactive ? '' : 'WHERE active = 1'}
+        ORDER BY kind, sort_order, id`,
+    ),
+  ]);
+
+  const settings = { ...DEFAULT_SETTINGS };
+  for (const row of settingsResult.results) settings[row.key] = row.value;
+
+  const config = {
+    version: Number(settings.config_version) || 0,
+    settings: {
+      businessName: settings.business_name,
+      subtitle: settings.subtitle,
+      vatRate: Number(settings.vat_rate) || 0,
+    },
+    materials: [],
+    extras: [],
+    costs: [],
+  };
+
+  for (const row of itemsResult.results) {
+    const list = config[LIST_BY_KIND[row.kind]];
+    if (!list) continue;
+    const item = { id: row.id, name: row.name, price: row.price_cents / 100, icon: row.icon };
+    if (includeInactive) item.active = row.active === 1;
+    list.push(item);
+  }
+  return config;
+}
+
+// Replaces the whole configuration in one transaction (D1 batches are atomic).
+// Existing items keep their ids; new ones get fresh ids.
+export async function writeConfig(db, config) {
+  const current = await db
+    .prepare("SELECT value FROM settings WHERE key = 'config_version'")
+    .first('value');
+  if (Number(current ?? 0) !== config.version) {
+    throw new HttpError(409, 'Οι ρυθμίσεις άλλαξαν από άλλη συσκευή. Ανανέωσε για να δεις τις τελευταίες.');
+  }
+
+  const upsertSetting = db.prepare(
+    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
+  );
+  const insertItem = db.prepare(
+    'INSERT INTO items (id, kind, name, price_cents, icon, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  );
+
+  const statements = [
+    upsertSetting.bind('business_name', config.settings.businessName),
+    upsertSetting.bind('subtitle', config.settings.subtitle),
+    upsertSetting.bind('vat_rate', String(config.settings.vatRate)),
+    upsertSetting.bind('config_version', String(config.version + 1)),
+    db.prepare('DELETE FROM items'),
+  ];
+
+  for (const [kind, key] of Object.entries(LIST_BY_KIND)) {
+    config[key].forEach((item, index) => {
+      statements.push(
+        insertItem.bind(item.id, kind, item.name, item.priceCents, item.icon, index, item.active ? 1 : 0),
+      );
+    });
+  }
+
+  await db.batch(statements);
+}
