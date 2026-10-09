@@ -176,17 +176,19 @@ img, svg { display: block; }
 }
 .hero-inner { max-width: 560px; margin: 0 auto; }
 
-.brand { display: flex; align-items: center; gap: 12px; }
+/* The logo: the round VW mark and the VELOKAS / WOODWORKS wordmark. */
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand-mark {
-  width: 44px; height: 44px;
-  border-radius: 13px;
-  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  flex: none;
+  width: auto;
+  height: 54px;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.45));
 }
-.brand-name {
-  font-family: var(--font-num);
-  font-size: 21px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+.brand-wordmark {
+  min-width: 0;
+  width: auto;
+  height: 36px;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
 }
 
 .hero-title {
@@ -216,6 +218,11 @@ img, svg { display: block; }
   font-weight: 700;
 }
 .install-btn .icon { width: 16px; height: 16px; }
+@media (max-width: 440px) {
+  /* Room for the whole logo: just the icon. */
+  .install-btn { width: 38px; height: 38px; padding: 0; justify-content: center; }
+  .install-btn span { display: none; }
+}
 
 /* ---------- Bottom navigation ---------- */
 .tabbar {
@@ -917,12 +924,32 @@ dialog.sheet[open] .sheet-body { animation: sheet-up 0.34s cubic-bezier(0.2, 0.8
 .notice code { font-size: 13px; padding: 1px 6px; border-radius: 6px; background: var(--surface-3); }
 
 /* ---------- Settings ---------- */
-.login-card { text-align: center; padding: 28px 20px 22px; }
-.login-card .badge-icon { margin: 0 auto 14px; width: 60px; height: 60px; border-radius: 20px; }
-.login-card .badge-icon .icon { width: 28px; height: 28px; }
+.login-card { text-align: center; padding: 14px 14px 22px; }
+.login-brand {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+  padding: 26px 16px 22px;
+  border-radius: 18px;
+  background:
+    radial-gradient(70% 70% at 50% 42%, rgba(240, 162, 74, 0.22), transparent 70%),
+    linear-gradient(165deg, #3a2416 0%, var(--walnut-900) 100%);
+}
+.login-brand::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: url("/img/grain.svg") center / 520px auto repeat;
+  opacity: 0.08;
+}
+.login-brand img { width: min(230px, 72%); height: auto; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45)); }
 .login-card h2 { font-size: 22px; font-weight: 800; }
 .login-card p { margin: 6px auto 18px; color: var(--text-2); max-width: 30ch; }
-.login-card form { display: grid; gap: 12px; text-align: left; }
+.login-card form { display: grid; gap: 12px; margin: 0 6px; text-align: left; }
 .form-error { color: var(--danger); font-weight: 700; font-size: 14px; text-align: center; }
 .form-error:empty { display: none; }
 
