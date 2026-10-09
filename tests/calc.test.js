@@ -5,6 +5,8 @@ import {
   buildShareText,
   computeQuote,
   emptyDraft,
+  jobSubject,
+  normaliseDraft,
   formatMoney,
   formatPercent,
   parseAmount,
@@ -29,6 +31,8 @@ const config = {
 };
 
 const draft = (overrides) => ({ ...emptyDraft(), ...overrides });
+// A kitchen-only quote: the kitchen job plus any other draft fields.
+const kitchen = (job, rest = {}) => draft({ jobs: { kitchen: job }, ...rest });
 
 test('parseAmount accepts Greek and international number formats', () => {
   assert.equal(parseAmount('4,5'), 4.5);
@@ -69,9 +73,9 @@ test('formatMoney uses Greek formatting and hides zero cents', () => {
 test('computeQuote adds base, extras, other extra and VAT', () => {
   const quote = computeQuote(
     config,
-    draft({ meters: '4,6', extras: { 2: { qty: '1', price: null }, 3: { qty: '2', price: null } }, other: '150' }),
+    kitchen({ qty: '4,6' }, { extras: { 2: { qty: '1', price: null }, 3: { qty: '2', price: null } }, other: '150' }),
   );
-  assert.equal(quote.material.name, 'Μελαμίνη');
+  assert.equal(quote.sections[0].material.name, 'Μελαμίνη');
   assert.equal(quote.baseCents, 147200); // 4.6 m × 320 €
   assert.equal(quote.pickedCents, 35500); // 195 + 2 × 80
   assert.equal(quote.otherCents, 15000);
@@ -83,24 +87,24 @@ test('computeQuote adds base, extras, other extra and VAT', () => {
 test('computeQuote honours the chosen material and per-quote price overrides', () => {
   const quote = computeQuote(
     config,
-    draft({ materialId: 9, meters: '3', extras: { 2: { qty: '2', price: '180' } } }),
+    kitchen({ materialId: 9, qty: '3' }, { extras: { 2: { qty: '2', price: '180' } } }),
   );
   assert.equal(quote.baseCents, 135150); // 3 × 450.50 €
   assert.equal(quote.pickedCents, 36000); // 2 × 180 € instead of 195 €
 
-  const custom = computeQuote(config, draft({ meters: '2', pricePerMeter: '300' }));
+  const custom = computeQuote(config, kitchen({ qty: '2', price: '300' }));
   assert.equal(custom.baseCents, 60000);
 });
 
 test('computeQuote treats invalid input as zero and falls back to the first material', () => {
-  const quote = computeQuote(config, draft({ meters: 'abc', materialId: 999, extras: { 3: { qty: 'x', price: null } } }));
-  assert.equal(quote.material.id, 1);
+  const quote = computeQuote(config, kitchen({ qty: 'abc', materialId: 999 }, { extras: { 3: { qty: 'x', price: null } } }));
+  assert.equal(quote.sections[0].material.id, 1);
   assert.equal(quote.netCents, 0);
   assert.equal(quote.margin, null);
 });
 
 test('computeQuote works out cost, profit and margin', () => {
-  const quote = computeQuote(config, draft({ meters: '5', costs: { 10: '700' } }));
+  const quote = computeQuote(config, kitchen({ qty: '5' }, { costs: { 10: '700' } }));
   assert.equal(quote.netCents, 160000);
   assert.equal(quote.costCents, 73000); // 700 typed + 30 default transport
   assert.equal(quote.profitCents, 87000);
@@ -130,8 +134,7 @@ test('discounts are a percentage or an amount, never more than the subtotal', ()
 
 test('the quote document carries what the customer sees, and no internal costs', () => {
   const withDeposit = { ...config, settings: { ...config.settings, depositPercent: 40 } };
-  const input = draft({
-    meters: '4,6',
+  const input = kitchen({ qty: '4,6' }, {
     extras: { 3: { qty: '2', price: null } },
     other: '150',
     otherLabel: ' Φωτισμός LED ',
@@ -148,7 +151,7 @@ test('the quote document carries what the customer sees, and no internal costs',
   assert.deepEqual(
     doc.lines.map((line) => [line.kind, line.name, line.detail, line.qty, line.unit, line.unitCents, line.totalCents]),
     [
-      ['base', 'Βασική κουζίνα', 'Μελαμίνη', 4.6, 'μ.', 32000, 147200],
+      ['base', 'Κουζίνα', 'Μελαμίνη', 4.6, 'μ.', 32000, 147200],
       ['extra', 'Μπουκαλοθήκη', '', 2, 'τεμ.', 8000, 16000],
       ['other', 'Φωτισμός LED', '', 1, '', 15000, 15000],
     ],
@@ -164,7 +167,8 @@ test('the quote document carries what the customer sees, and no internal costs',
 
   const text = buildShareText(doc, { businessName: 'Velokas Woodworks' });
   assert.match(text, /^Velokas Woodworks · Προσφορά 2026-004\n6 Οκτωβρίου 2026\nΠρος: Μαρία\n/);
-  assert.match(text, /Βασική κουζίνα \(Μελαμίνη\): 4,6 μ\. × 320 € = 1\.472 €/);
+  assert.equal(doc.subject, 'Προσφορά κουζίνας');
+  assert.match(text, /Κουζίνα \(Μελαμίνη\): 4,6 μ\. × 320 € = 1\.472 €/);
   assert.match(text, /• Μπουκαλοθήκη: 2 × 80 € = 160 €/);
   assert.match(text, /• Φωτισμός LED: 150 €/);
   assert.match(text, /Υποσύνολο: 1\.782 €\nΈκπτωση 10%: -178,20 €\nΣύνολο χωρίς ΦΠΑ: 1\.603,80 €/);
@@ -179,18 +183,18 @@ test('a material priced per square metre carries its unit to the quote', () => {
     ...config,
     materials: [...config.materials, { id: 12, name: 'Πάγκος χαλαζία', price: 210, unit: 'm2', icon: '' }],
   };
-  const input = draft({ materialId: 12, meters: '3,5' });
+  const input = kitchen({ materialId: 12, qty: '3,5' });
   const quote = computeQuote(withSquareMetres, input);
-  assert.equal(quote.unit.short, 'τ.μ.');
+  assert.equal(quote.sections[0].unit.short, 'τ.μ.');
   assert.equal(quote.baseCents, 73500);
 
   const doc = buildQuoteDoc(quote, input, { date: new Date(2026, 9, 9, 12) });
   assert.deepEqual([doc.lines[0].detail, doc.lines[0].qty, doc.lines[0].unit], ['Πάγκος χαλαζία', 3.5, 'τ.μ.']);
   const text = buildShareText(doc, { businessName: 'Velokas Woodworks' });
-  assert.match(text, /Βασική κουζίνα \(Πάγκος χαλαζία\): 3,5 τ\.μ\. × 210 € = 735 €/);
+  assert.match(text, /Κουζίνα \(Πάγκος χαλαζία\): 3,5 τ\.μ\. × 210 € = 735 €/);
 
   // Materials without a unit (saved before units existed) are per metre.
-  assert.equal(computeQuote(config, draft({ meters: '2' })).unit.short, 'μ.');
+  assert.equal(computeQuote(config, kitchen({ qty: '2' })).sections[0].unit.short, 'μ.');
 });
 
 test('an unsaved quote with nothing optional reads simply', () => {
@@ -211,4 +215,89 @@ test('an unsaved quote with nothing optional reads simply', () => {
       'Σύνολο με ΦΠΑ: 99,20 €',
     ].join('\n'),
   );
+});
+
+// Kitchen, wardrobe and door, as in migration 0004.
+const shop = {
+  ...config,
+  materials: [
+    ...config.materials,
+    { id: 20, name: 'Συρόμενη', price: 390, unit: 'm', section: 'wardrobe', icon: '' },
+    { id: 21, name: 'Ανοιγόμενη', price: 400, unit: 'pcs', section: 'door', icon: '' },
+  ],
+  extras: [
+    ...config.extras,
+    { id: 30, name: 'LED φωτισμός', price: 18, unit: 'm', section: 'kitchen', icon: 'lightbulb' },
+    { id: 31, name: 'LED φωτισμός', price: 18, unit: 'm', section: 'wardrobe', icon: 'lightbulb' },
+    { id: 32, name: 'Συρτάρι soft close', price: 45, unit: 'pcs', section: 'wardrobe', icon: 'archive' },
+  ],
+};
+
+test('a quote can cover a kitchen, a wardrobe and doors together', () => {
+  const input = draft({
+    sections: ['door', 'kitchen', 'wardrobe'], // any order: shown kitchen, wardrobe, door
+    combo: true,
+    jobs: { kitchen: { qty: '4' }, wardrobe: { qty: '2,4' }, door: { qty: '3' } },
+    extras: { 3: { qty: '1' }, 31: { qty: '3,5' }, 32: { qty: '2' }, 30: { qty: '9' } },
+  });
+  const quote = computeQuote(shop, input);
+  assert.deepEqual(quote.sections.map((s) => [s.key, s.material.name, s.baseCents, s.extrasCents]), [
+    ['kitchen', 'Μελαμίνη', 128000, 8000 + 16200], // 4 m × 320 €; bottle rack 80 € + LED 9 m × 18 €
+    ['wardrobe', 'Συρόμενη', 93600, 6300 + 9000], // 2,4 m × 390 €; LED 3,5 m × 18 € + 2 × 45 €
+    ['door', 'Ανοιγόμενη', 120000, 0], // 3 doors × 400 €
+  ]);
+  assert.equal(quote.subtotalCents, 128000 + 24200 + 93600 + 15300 + 120000);
+
+  const doc = buildQuoteDoc(quote, input, { date: new Date(2026, 9, 9, 12) });
+  assert.equal(doc.subject, 'Προσφορά κουζίνας, ντουλάπας και πόρτας');
+  assert.deepEqual(
+    doc.lines.map((line) => [line.name, line.detail, line.qty, line.unit]),
+    [
+      ['Κουζίνα', 'Μελαμίνη', 4, 'μ.'],
+      ['Μπουκαλοθήκη', 'Κουζίνα', 1, 'τεμ.'],
+      ['LED φωτισμός', 'Κουζίνα', 9, 'μ.'],
+      ['Ντουλάπα', 'Συρόμενη', 2.4, 'μ.'],
+      ['LED φωτισμός', 'Ντουλάπα', 3.5, 'μ.'],
+      ['Συρτάρι soft close', 'Ντουλάπα', 2, 'τεμ.'],
+      ['Πόρτα', 'Ανοιγόμενη', 3, 'τεμ.'],
+    ],
+  );
+  const text = buildShareText(doc, { businessName: 'Velokas Woodworks' });
+  assert.match(text, /^Velokas Woodworks · Προσφορά κουζίνας, ντουλάπας και πόρτας\n/);
+  assert.match(text, /• LED φωτισμός \(Ντουλάπα\): 3,5 μ\. × 18 € = 63 €/);
+  assert.match(text, /• Συρτάρι soft close \(Ντουλάπα\): 2 × 45 € = 90 €/);
+  assert.match(text, /Πόρτα \(Ανοιγόμενη\): 3 τεμ\. × 400 € = 1\.200 €/);
+});
+
+test('jobs left out of the quote are not counted, but are kept', () => {
+  const input = draft({
+    sections: ['wardrobe'],
+    jobs: { kitchen: { qty: '4' }, wardrobe: { qty: '2' } },
+    extras: { 3: { qty: '1' }, 32: { qty: '1' } },
+  });
+  const quote = computeQuote(shop, input);
+  assert.equal(quote.subtotalCents, 78000 + 4500);
+  const doc = buildQuoteDoc(quote, input);
+  assert.deepEqual(doc.lines.map((line) => [line.name, line.detail]), [['Ντουλάπα', 'Συρόμενη'], ['Συρτάρι soft close', '']]);
+  assert.equal(normaliseDraft(input).jobs.kitchen.qty, '4');
+});
+
+test('drafts and saved quotes from before job types open as a kitchen', () => {
+  const old = { meters: '3', materialId: 9, pricePerMeter: null, extras: { 2: { qty: '1', price: null } }, other: '', costs: {} };
+  const upgraded = normaliseDraft(old);
+  assert.deepEqual(upgraded.sections, ['kitchen']);
+  assert.deepEqual(upgraded.jobs.kitchen, { materialId: 9, qty: '3', price: null });
+  assert.equal('meters' in upgraded, false);
+  const quote = computeQuote(config, old);
+  assert.equal(quote.baseCents, 135150);
+  assert.equal(quote.pickedCents, 19500);
+
+  assert.deepEqual(normaliseDraft({ sections: ['garage'] }).sections, ['kitchen']);
+  assert.deepEqual(normaliseDraft(null).sections, ['kitchen']);
+});
+
+test('the subject names the jobs in a quote', () => {
+  assert.equal(jobSubject(['kitchen']), 'Προσφορά κουζίνας');
+  assert.equal(jobSubject(['door', 'wardrobe']), 'Προσφορά ντουλάπας και πόρτας');
+  assert.equal(jobSubject([]), 'Προσφορά');
 });

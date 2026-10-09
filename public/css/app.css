@@ -1011,7 +1011,9 @@ dialog.sheet[open] .sheet-body { animation: sheet-up 0.34s cubic-bezier(0.2, 0.8
 .admin-item .item-tools .price-field { flex: 1; min-width: 0; }
 .admin-item .item-tools .price-field input { height: 44px; font-size: 16px; padding-right: 52px; }
 .admin-item .item-tools .price-field .suffix { font-size: 13px; }
-.admin-item .unit-picker { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }
+.admin-item .unit-picker { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, 1fr); }
+.admin-item .unit-picker.units-3 { grid-template-columns: repeat(3, 1fr); }
+.admin-item .unit-picker.units-3 button { padding: 0 4px; font-size: 13.5px; }
 .admin-item .unit-picker button { height: 40px; font-size: 14.5px; }
 .admin-item .item-tools .price-field input { padding-right: 62px; }
 .admin-item.is-off { opacity: 0.62; }
@@ -1361,6 +1363,68 @@ textarea::placeholder { color: var(--text-3); }
   .sheet-svg text { fill: #1a120c; }
 }
 .warn-list { margin: 0; padding-left: 20px; color: var(--danger); font-weight: 700; font-size: 14px; }
+
+/* ---------- Job types: kitchen, wardrobe, door ---------- */
+[data-job="kitchen"] { --tint: var(--amber); }
+[data-job="wardrobe"] { --tint: var(--sky); }
+[data-job="door"] { --tint: var(--teal); }
+[data-job="combo"] { --tint: var(--violet); }
+
+.job-picker { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.job-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  min-width: 0;
+  padding: 12px 14px 13px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 16px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 15.5px;
+  font-weight: 800;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.job-tile:active { transform: scale(0.98); }
+.job-tile-icon {
+  display: grid; place-items: center;
+  flex: none;
+  width: 36px; height: 36px;
+  border-radius: 11px;
+  color: var(--tint);
+  background: color-mix(in srgb, var(--tint) 16%, transparent);
+}
+.job-tile-icon .icon { width: 20px; height: 20px; }
+.job-tile-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-tile[aria-pressed="true"] {
+  border-color: var(--tint);
+  background: color-mix(in srgb, var(--tint) 12%, var(--surface));
+  color: var(--text);
+}
+.job-tile[aria-pressed="true"] .job-tile-icon { color: #fff; background: var(--tint); }
+.job-combo { margin-top: 14px; }
+.job-combo-label { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--text-2); }
+.job-combo .chips { flex-wrap: wrap; overflow: visible; }
+.job-combo .chip { display: inline-flex; align-items: center; gap: 6px; }
+.job-combo .chip .icon { width: 16px; height: 16px; }
+
+.job-sub {
+  display: flex; align-items: center; gap: 6px;
+  margin: 18px 0 10px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink, var(--text-2));
+}
+.job-sub .icon { width: 16px; height: 16px; }
+.job-card .empty-hint { margin-top: 0; }
+.other-row { grid-template-columns: 1.5fr 1fr; }
+
+.price-tabs { display: grid; gap: 8px; margin-top: 6px; }
+.price-tabs .eyebrow { margin: 0 4px; color: var(--text-3); }
+.job-tabs { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--surface); box-shadow: var(--shadow-card); }
+.job-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 6px; font-size: 14.5px; }
+.job-tabs button .icon { width: 18px; height: 18px; }
 
 /* ---------- Shared bits for the archive and the cut list ---------- */
 .btn.is-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--line-2)); }

@@ -1,5 +1,5 @@
 import { api } from './api.js';
-import { MATERIAL_UNITS, formatInput, parseAmount, parseQty } from './calc.js';
+import { SECTIONS, SECTION_KEYS, UNITS, formatInput, parseAmount, parseQty, sectionOf } from './calc.js';
 import { $, h, toast } from './dom.js';
 import { PICKER_ICONS, icon, tileTint } from './icons.js';
 import { loginCard, session, unconfiguredNotice } from './session.js';
@@ -9,12 +9,14 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LISTS = {
   materials: {
     title: 'Υλικά',
-    eyebrow: 'Τιμή ανά μέτρο ή τ.μ.',
+    eyebrow: 'Τιμή ανά μέτρο, τ.μ. ή τεμάχιο',
     accent: 'amber',
     icon: 'layers',
     unit: '€/μ.',
-    hasUnit: true, // priced per metre or per square metre
-    desc: 'Οι επιλογές της λίστας «Υλικό». Διάλεξε αν η τιμή είναι ανά μέτρο ή ανά τετραγωνικό. Με τον διακόπτη κρύβεις κάτι χωρίς να το σβήσεις.',
+    units: ['m', 'm2', 'pcs'], // the first is the default for new items
+    sectioned: true, // each belongs to a kind of job
+    sectionTitle: 'materialsTitle',
+    desc: 'Οι επιλογές που διαλέγεις στην κοστολόγηση. Διάλεξε αν η τιμή είναι ανά μέτρο, τετραγωνικό ή τεμάχιο. Με τον διακόπτη κρύβεις κάτι χωρίς να το σβήσεις.',
     addLabel: 'Προσθήκη υλικού',
     hasIcon: false,
     newIcon: '',
@@ -22,11 +24,14 @@ const LISTS = {
   },
   extras: {
     title: 'Extras',
-    eyebrow: 'Τιμή ανά τεμάχιο',
+    eyebrow: 'Τιμή ανά τεμάχιο ή μέτρο',
     accent: 'teal',
     icon: 'sparkles',
     unit: '€/τεμ.',
-    desc: 'Αξεσουάρ με πλήθος. Πάτα το εικονίδιο για να το αλλάξεις.',
+    units: ['pcs', 'm'],
+    sectioned: true,
+    sectionTitle: 'extrasTitle',
+    desc: 'Αξεσουάρ με πλήθος, ή με μέτρα όπως ο φωτισμός LED. Πάτα το εικονίδιο για να το αλλάξεις.',
     addLabel: 'Προσθήκη extra',
     hasIcon: true,
     newIcon: 'sparkles',
@@ -63,7 +68,8 @@ function toDraft(config) {
       name: item.name,
       price: formatInput(item.price),
       icon: item.icon || '',
-      unit: item.unit === 'm2' ? 'm2' : 'm',
+      unit: item.unit,
+      section: sectionOf(item),
       active: item.active !== false,
     }));
   return {
@@ -88,13 +94,14 @@ function toDraft(config) {
 
 // Draft -> request body for PUT /api/admin/config.
 function toPayload(draft) {
-  const items = (list, { withUnit = false } = {}) =>
+  const items = (list, { priced = false } = {}) =>
     list.map((item) => ({
       id: item.id ?? undefined,
       name: item.name.trim(),
       price: parseAmount(item.price),
       icon: item.icon || undefined,
-      unit: withUnit ? item.unit : undefined,
+      unit: priced ? item.unit : undefined,
+      section: priced ? item.section : undefined,
       active: item.active,
     }));
   return {
@@ -111,8 +118,8 @@ function toPayload(draft) {
       validityDays: parseQty(draft.settings.validityDays),
       depositPercent: parseAmount(draft.settings.depositPercent),
     },
-    materials: items(draft.materials, { withUnit: true }),
-    extras: items(draft.extras),
+    materials: items(draft.materials, { priced: true }),
+    extras: items(draft.extras, { priced: true }),
     costs: items(draft.costs),
   };
 }
@@ -141,6 +148,9 @@ export function createSettings({ onSaved }) {
   let saving = false;
   let errorBox = null;
   const listEls = {};
+  const cardEls = {};
+  let section = 'kitchen'; // whose price list is on screen: kitchen, wardrobe or door
+  let tabsEl = null;
 
   const hasChanges = () => draft !== null && JSON.stringify(toPayload(draft)) !== baselineJson;
   const isDirty = () => view === 'editor' && hasChanges();
@@ -223,8 +233,41 @@ export function createSettings({ onSaved }) {
       errorBox,
       generalCard(),
       businessCard(),
+      priceListTabs(),
       ...Object.keys(LISTS).map(listCard),
     ]);
+  }
+
+  // Kitchen, wardrobe or door: which price list the cards below show.
+  function priceListTabs() {
+    tabsEl = h(
+      'div',
+      { class: 'segmented job-tabs', role: 'group', 'aria-label': 'Τιμοκατάλογος για' },
+      SECTION_KEYS.map((key) =>
+        h(
+          'button',
+          { type: 'button', 'aria-pressed': String(section === key), onclick: () => showSection(key) },
+          icon(SECTIONS[key].icon),
+          SECTIONS[key].label,
+        ),
+      ),
+    );
+    return h('div', { class: 'price-tabs' }, h('p', { class: 'eyebrow' }, 'Τιμοκατάλογος για'), tabsEl);
+  }
+
+  function showSection(key) {
+    if (section === key) return;
+    section = key;
+    tabsEl.querySelectorAll('button').forEach((button, index) => button.setAttribute('aria-pressed', String(SECTION_KEYS[index] === key)));
+    for (const [listKey, meta] of Object.entries(LISTS)) {
+      if (meta.sectioned) cardEls[listKey].replaceWith(listCard(listKey));
+    }
+  }
+
+  // The items of a list that are on screen: for materials and extras, the
+  // current job's only.
+  function visibleItems(key) {
+    return LISTS[key].sectioned ? draft[key].filter((item) => item.section === section) : draft[key];
   }
 
   function generalCard() {
@@ -308,23 +351,26 @@ export function createSettings({ onSaved }) {
     const meta = LISTS[key];
     listEls[key] = h('div', { class: 'admin-list' });
     renderList(key);
-    return h(
+    const title = meta.sectioned ? SECTIONS[section][meta.sectionTitle] : meta.title;
+    cardEls[key] = h(
       'section',
       { class: 'card', 'data-accent': meta.accent },
-      cardHead(meta.icon, meta.title, meta.eyebrow),
+      cardHead(meta.icon, title, meta.eyebrow),
       h('p', { class: 'card-desc' }, meta.desc),
       listEls[key],
       h('button', { type: 'button', class: 'add-btn', onclick: () => addItem(key) }, icon('plus'), meta.addLabel),
     );
+    return cardEls[key];
   }
 
   function renderList(key) {
-    listEls[key].replaceChildren(...draft[key].map((item, index) => itemRow(key, item, index)));
+    const items = visibleItems(key);
+    listEls[key].replaceChildren(...items.map((item, index) => itemRow(key, item, index, items.length)));
   }
 
-  function itemRow(key, item, index) {
+  function itemRow(key, item, index, count) {
     const meta = LISTS[key];
-    const count = draft[key].length;
+    if (meta.units && !meta.units.includes(item.unit)) item.unit = meta.units[0];
 
     const name = h('input', {
       value: item.name,
@@ -337,7 +383,7 @@ export function createSettings({ onSaved }) {
         changed(event.target);
       },
     });
-    const priceUnit = () => (meta.hasUnit ? `€/${MATERIAL_UNITS[item.unit].short}` : meta.unit);
+    const priceUnit = () => (meta.units ? `€/${UNITS[item.unit].short}` : meta.unit);
     const priceSuffix = h('span', { class: 'suffix' }, priceUnit());
     const price = h('input', {
       value: item.price,
@@ -365,6 +411,7 @@ export function createSettings({ onSaved }) {
       'div',
       {
         class: `admin-item${meta.hasIcon ? '' : ' no-icon'}${item.active ? '' : ' is-off'}`,
+        'data-key': item.key,
         style: { '--tint': tileTint(index + meta.tintOffset) },
       },
       meta.hasIcon &&
@@ -375,7 +422,7 @@ export function createSettings({ onSaved }) {
         { type: 'button', class: 'icon-btn danger', 'aria-label': 'Διαγραφή', onclick: () => removeItem(key, item) },
         icon('trash-2'),
       ),
-      meta.hasUnit && unitPicker(),
+      meta.units && unitPicker(),
       h(
         'div',
         { class: 'item-tools' },
@@ -383,22 +430,19 @@ export function createSettings({ onSaved }) {
         h('label', { class: 'switch', title: 'Εμφανίζεται στην κοστολόγηση' }, toggle, h('span', { class: 'track' })),
         h(
           'button',
-          { type: 'button', class: 'icon-btn', 'aria-label': 'Μετακίνηση πάνω', disabled: index === 0, onclick: () => move(key, index, -1) },
+          { type: 'button', class: 'icon-btn', 'aria-label': 'Μετακίνηση πάνω', disabled: index === 0, onclick: () => move(key, item, -1) },
           icon('arrow-up'),
         ),
         h(
           'button',
-          { type: 'button', class: 'icon-btn', 'aria-label': 'Μετακίνηση κάτω', disabled: index === count - 1, onclick: () => move(key, index, 1) },
+          { type: 'button', class: 'icon-btn', 'aria-label': 'Μετακίνηση κάτω', disabled: index === count - 1, onclick: () => move(key, item, 1) },
           icon('arrow-down'),
         ),
       ),
     );
-    // Per metre or per square metre (materials only).
+    // How it's priced: per metre, per square metre or per piece.
     function unitPicker() {
-      const buttons = [
-        ['m', 'Ανά μέτρο'],
-        ['m2', 'Ανά τ.μ.'],
-      ].map(([unit, label]) =>
+      const buttons = meta.units.map((unit) => [unit, UNITS[unit].per]).map(([unit, label]) =>
         h(
           'button',
           {
@@ -416,7 +460,7 @@ export function createSettings({ onSaved }) {
           label,
         ),
       );
-      return h('div', { class: 'segmented unit-picker', role: 'group', 'aria-label': 'Η τιμή είναι' }, buttons);
+      return h('div', { class: `segmented unit-picker units-${meta.units.length}`, role: 'group', 'aria-label': 'Η τιμή είναι' }, buttons);
     }
 
     return row;
@@ -425,7 +469,16 @@ export function createSettings({ onSaved }) {
   // ---------- List actions ----------
   function addItem(key) {
     const meta = LISTS[key];
-    draft[key].push({ key: ++keySeq, id: null, name: '', price: '', icon: meta.newIcon, unit: 'm', active: true });
+    draft[key].push({
+      key: ++keySeq,
+      id: null,
+      name: '',
+      price: '',
+      icon: meta.newIcon,
+      unit: meta.units?.[0],
+      section: meta.sectioned ? section : 'kitchen',
+      active: true,
+    });
     renderList(key);
     changed();
     const row = listEls[key].lastElementChild;
@@ -452,15 +505,19 @@ export function createSettings({ onSaved }) {
     });
   }
 
-  function move(key, index, delta) {
+  // Swaps an item with its neighbour on screen (the same job's items).
+  function move(key, item, delta) {
+    const shown = visibleItems(key);
+    const neighbour = shown[shown.indexOf(item) + delta];
+    if (!neighbour) return;
     const items = draft[key];
-    const target = index + delta;
-    if (target < 0 || target >= items.length) return;
-    [items[index], items[target]] = [items[target], items[index]];
+    const a = items.indexOf(item);
+    const b = items.indexOf(neighbour);
+    [items[a], items[b]] = [items[b], items[a]];
     renderList(key);
     changed();
     // Keep focus on the same arrow so repeated taps keep moving the item.
-    const row = listEls[key].children[target];
+    const row = listEls[key].querySelector(`[data-key="${item.key}"]`);
     const arrow = row.querySelectorAll('.item-tools .icon-btn')[delta < 0 ? 0 : 1];
     (arrow.disabled ? $('[data-field="name"]', row) : arrow).focus();
   }
@@ -521,13 +578,25 @@ export function createSettings({ onSaved }) {
     const deposit = parseAmount(s.depositPercent);
     if (deposit === null || deposit > 100) flag($('[data-field="depositPercent"]', root), 'Η προκαταβολή πρέπει να είναι από 0 έως 100%.');
 
+    // A problem in another job's price list: show that list first.
+    const bad = (item) => !item.name.trim() || parseAmount(item.price) === null;
+    const hidden = ['materials', 'extras'].flatMap((key) => draft[key]).find((item) => bad(item) && item.section !== section);
+    const visibleBad = ['materials', 'extras'].some((key) => visibleItems(key).some(bad));
+    if (hidden && !visibleBad) showSection(hidden.section);
+
     for (const [key, meta] of Object.entries(LISTS)) {
-      draft[key].forEach((item, index) => {
-        const row = listEls[key].children[index];
-        const label = item.name.trim() || `#${index + 1}`;
-        if (!item.name.trim()) flag($('[data-field="name"]', row), `${meta.title} #${index + 1}: λείπει το όνομα.`);
-        if (parseAmount(item.price) === null) flag($('[data-field="price"]', row), `${meta.title}: μη έγκυρη τιμή στο «${label}».`);
-      });
+      const counts = {};
+      for (const item of draft[key]) {
+        const group = meta.sectioned ? item.section : 'all';
+        const number = (counts[group] = (counts[group] ?? 0) + 1);
+        const title = meta.sectioned ? SECTIONS[item.section][meta.sectionTitle] : meta.title;
+        const row = listEls[key].querySelector(`[data-key="${item.key}"]`);
+        const field = (name) => (row ? $(`[data-field="${name}"]`, row) : null);
+        const report = (input, message) => (input ? flag(input, message) : problems.push(message));
+        const label = item.name.trim() || `#${number}`;
+        if (!item.name.trim()) report(field('name'), `${title} #${number}: λείπει το όνομα.`);
+        if (parseAmount(item.price) === null) report(field('price'), `${title}: μη έγκυρη τιμή στο «${label}».`);
+      }
     }
     if (!draft.materials.some((m) => m.active)) problems.push('Χρειάζεται τουλάχιστον ένα ενεργό υλικό.');
     return { problems, firstInvalid };

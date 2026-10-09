@@ -9,7 +9,7 @@ import { session } from './session.js';
 import { createSettings } from './settings.js';
 
 const TABS = {
-  calc: { title: 'Κοστολόγηση Κουζίνας' }, // subtitle comes from Settings
+  calc: { title: 'Κοστολόγηση' }, // subtitle comes from Settings
   quotes: { title: 'Προσφορές', subtitle: 'Το αρχείο σου: ποιες στάλθηκαν, ποιες κλείστηκαν, PDF ξανά με ένα πάτημα.' },
   cuts: { title: 'Κοπές', subtitle: 'Λίστα κοπής: πόσα φύλλα χρειάζεσαι, πώς κόβονται, πόση ταινία.' },
   settings: { title: 'Ρυθμίσεις', subtitle: 'Τιμές, υλικά, extras και τα στοιχεία που μπαίνουν στα PDF.' },

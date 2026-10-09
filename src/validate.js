@@ -21,7 +21,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const ICON_RE = /^[a-z0-9-]{1,40}$/;
 
-export const MATERIAL_UNITS = ['m', 'm2'];
+// How an item is priced: per metre, per square metre or per piece.
+export const UNITS = ['m', 'm2', 'pcs'];
+// The kinds of job a quote covers; materials and extras belong to one.
+export const SECTIONS = ['kitchen', 'wardrobe', 'door'];
 
 const LIST_LABELS = {
   materials: 'Υλικά',
@@ -101,14 +104,21 @@ function validateItems(key, input, max, errors) {
       else errors.push(`${where}: μη έγκυρο εικονίδιο.`);
     }
 
-    // Materials are priced per metre or per square metre; the rest per piece.
+    // Materials default to per metre, extras to per piece; cost lines are
+    // plain amounts. Materials and extras belong to a kind of job.
+    const priced = key !== 'costs';
     let unit = key === 'materials' ? 'm' : 'pcs';
-    if (key === 'materials' && item.unit !== undefined && item.unit !== null) {
-      if (MATERIAL_UNITS.includes(item.unit)) unit = item.unit;
+    if (priced && item.unit !== undefined && item.unit !== null) {
+      if (UNITS.includes(item.unit)) unit = item.unit;
       else errors.push(`${where} (${name || 'χωρίς όνομα'}): μη έγκυρη μονάδα τιμής.`);
     }
+    let section = 'kitchen';
+    if (priced && item.section !== undefined && item.section !== null) {
+      if (SECTIONS.includes(item.section)) section = item.section;
+      else errors.push(`${where} (${name || 'χωρίς όνομα'}): μη έγκυρο είδος εργασίας.`);
+    }
 
-    return { id, name, priceCents: priceCents ?? 0, icon, unit, active: item.active !== false };
+    return { id, name, priceCents: priceCents ?? 0, icon, unit, section, active: item.active !== false };
   });
 }
 
@@ -259,6 +269,7 @@ export function validateQuote(body) {
   if (!Number.isInteger(validityDays) || validityDays < 0 || validityDays > LIMITS.maxValidityDays) {
     errors.push('Μη έγκυρη ισχύς προσφοράς.');
   }
+  const subject = cleanText(docIn.subject).slice(0, 120);
   const date = typeof docIn.date === 'string' && !Number.isNaN(Date.parse(docIn.date)) ? new Date(docIn.date).toISOString() : null;
   const notes = cleanMultiline(docIn.notes);
   if (notes.length > LIMITS.termsLength) errors.push(`Σημειώσεις: έως ${LIMITS.termsLength} χαρακτήρες.`);
@@ -278,6 +289,7 @@ export function validateQuote(body) {
     customer,
     doc: {
       v: 1,
+      subject,
       date,
       validityDays,
       customer,
