@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Κοστολόγηση Κουζίνας · Velokas Woodworks</title>
-  <meta name="description" content="Κοστολόγηση κουζίνας, προσφορές σε PDF και κοπές φύλλων για τη Velokas Woodworks.">
+  <title>Κοστολόγηση · Velokas Woodworks</title>
+  <meta name="description" content="Κοστολόγηση κουζίνας, ντουλάπας και πόρτας, προσφορές σε PDF και κοπές φύλλων για τη Velokas Woodworks.">
   <meta name="theme-color" content="#2E1C12">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Velokas">
@@ -28,7 +28,7 @@
           <span>Εγκατάσταση</span>
         </button>
       </div>
-      <h1 class="hero-title" id="pageTitle">Κοστολόγηση Κουζίνας</h1>
+      <h1 class="hero-title" id="pageTitle">Κοστολόγηση</h1>
       <p class="hero-sub" id="pageSubtitle" data-bind="subtitle">Τιμές χωρίς ΦΠΑ • βάση με τα δικά σου σημερινά δεδομένα</p>
     </div>
   </header>
@@ -40,64 +40,49 @@
       <div id="calcNotice"></div>
 
       <form id="calcForm" class="stack" autocomplete="off" novalidate hidden>
-        <!-- 1. Base kitchen -->
-        <section class="card" data-accent="amber" aria-labelledby="baseTitle">
+        <!-- 1. What the quote is for -->
+        <section class="card" data-accent="amber" aria-labelledby="jobTitle">
           <header class="card-head">
-            <span class="badge-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#ruler"></use></svg></span>
+            <span class="badge-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#layers-2"></use></svg></span>
             <div class="card-titles">
               <p class="eyebrow">Βήμα 1</p>
-              <h2 id="baseTitle">Βασική κουζίνα</h2>
+              <h2 id="jobTitle">Τι προσφορά φτιάχνεις;</h2>
             </div>
-            <output class="card-sum" id="baseSum" aria-label="Υποσύνολο βασικής κουζίνας">0 €</output>
           </header>
+          <div class="job-picker" id="jobPicker" role="group" aria-labelledby="jobTitle"></div>
+          <div class="job-combo" id="jobCombo" hidden></div>
+        </section>
 
-          <div class="field">
-            <label for="material">Υλικό</label>
-            <div class="select-wrap">
-              <select id="material" name="material"></select>
-              <svg class="icon select-chev" aria-hidden="true"><use href="/icons.svg#chevron-down"></use></svg>
-            </div>
-          </div>
+        <!-- 2. A card per job: kitchen, wardrobe, door (filled by calculator.js) -->
+        <div class="stack" id="jobsRoot"></div>
 
-          <div class="field-row">
+        <!-- Anything else, for the whole quote -->
+        <section class="card" data-accent="violet" aria-labelledby="otherTitle">
+          <header class="card-head">
+            <span class="badge-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#sparkles"></use></svg></span>
+            <div class="card-titles">
+              <p class="eyebrow">Προαιρετικό</p>
+              <h2 id="otherTitle">Άλλο extra</h2>
+            </div>
+            <output class="card-sum" id="otherSum" aria-label="Άλλο extra"></output>
+          </header>
+          <div class="field-row other-row">
             <div class="field">
-              <label for="meters" id="qtyLabel">Μέτρα</label>
-              <div class="input-wrap">
-                <input id="meters" name="meters" inputmode="decimal" placeholder="π.χ. 5" enterkeyhint="next">
-                <span class="suffix" id="qtyUnit">μ.</span>
-              </div>
+              <label for="otherLabel">Περιγραφή</label>
+              <input id="otherLabel" maxlength="80" placeholder="π.χ. ειδική κατασκευή" enterkeyhint="next">
             </div>
             <div class="field">
-              <label for="pricePerMeter" id="ppmLabel">Τιμή / μέτρο</label>
+              <label for="otherAmount">Ποσό</label>
               <div class="input-wrap">
-                <input id="pricePerMeter" name="pricePerMeter" inputmode="decimal" enterkeyhint="done">
+                <input id="otherAmount" inputmode="decimal" placeholder="0" enterkeyhint="done">
                 <span class="suffix">€</span>
               </div>
             </div>
           </div>
-          <button type="button" class="link-btn" id="resetPpm" hidden>
-            <svg class="icon" aria-hidden="true"><use href="/icons.svg#undo-2"></use></svg>
-            <span></span>
-          </button>
-
-          <p class="formula" id="baseFormula" aria-live="polite"></p>
-        </section>
-
-        <!-- 2. Extras -->
-        <section class="card" data-accent="teal" aria-labelledby="extrasTitle">
-          <header class="card-head">
-            <span class="badge-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#sparkles"></use></svg></span>
-            <div class="card-titles">
-              <p class="eyebrow">Βήμα 2</p>
-              <h2 id="extrasTitle">Extras</h2>
-            </div>
-            <output class="card-sum" id="extrasSum" aria-label="Υποσύνολο extras">0 €</output>
-          </header>
-          <div class="extras" id="extrasList"></div>
         </section>
 
         <!-- 3. Customer, discount, notes (printed on the quote) -->
-        <section class="card" data-accent="sky" aria-labelledby="clientTitle">
+        <section class="card" data-accent="rose" aria-labelledby="clientTitle">
           <header class="card-head">
             <span class="badge-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#user-round"></use></svg></span>
             <div class="card-titles">

@@ -28,9 +28,9 @@ test('normalises a valid config', () => {
   assert.equal(config.version, 3);
   assert.equal(config.settings.businessName, 'Velokas Woodworks');
   assert.equal(config.settings.vatRate, 24);
-  assert.deepEqual(config.materials, [{ id: 1, name: 'Μελαμίνη', priceCents: 32000, icon: '', unit: 'm', active: true }]);
-  assert.deepEqual(config.extras[0], { id: 2, name: 'Magic Corner', priceCents: 19550, icon: 'square-round-corner', unit: 'pcs', active: true });
-  assert.deepEqual(config.extras[1], { id: null, name: 'Νέο extra', priceCents: 1000, icon: '', unit: 'pcs', active: true });
+  assert.deepEqual(config.materials, [{ id: 1, name: 'Μελαμίνη', priceCents: 32000, icon: '', unit: 'm', section: 'kitchen', active: true }]);
+  assert.deepEqual(config.extras[0], { id: 2, name: 'Magic Corner', priceCents: 19550, icon: 'square-round-corner', unit: 'pcs', section: 'kitchen', active: true });
+  assert.deepEqual(config.extras[1], { id: null, name: 'Νέο extra', priceCents: 1000, icon: '', unit: 'pcs', section: 'kitchen', active: true });
   assert.equal(config.costs[0].active, false);
 });
 
@@ -160,15 +160,24 @@ test('only known quote statuses are accepted', () => {
   assert.throws(() => validateStatus(null), ValidationError);
 });
 
-test('materials are priced per metre or per square metre', () => {
+test('materials and extras have a unit and a kind of job', () => {
   const body = valid();
-  body.materials.push({ name: 'Πάγκος χαλαζία', price: 210, unit: 'm2', active: true });
-  body.extras[0].unit = 'm2'; // only materials have a unit
+  body.materials.push({ name: 'Ανοιγόμενη', price: 400, unit: 'pcs', section: 'door', active: true });
+  body.extras[0].unit = 'm';
+  body.extras[0].section = 'wardrobe';
+  body.costs[0].unit = 'm'; // cost lines are plain amounts
+  body.costs[0].section = 'door';
   const config = validateConfig(body);
-  assert.deepEqual(config.materials.map((m) => m.unit), ['m', 'm2']);
-  assert.equal(config.extras[0].unit, 'pcs');
+  assert.deepEqual(config.materials.map((m) => [m.unit, m.section]), [['m', 'kitchen'], ['pcs', 'door']]);
+  assert.deepEqual([config.extras[0].unit, config.extras[0].section], ['m', 'wardrobe']);
+  assert.deepEqual([config.extras[1].unit, config.extras[1].section], ['pcs', 'kitchen']);
+  assert.deepEqual([config.costs[0].unit, config.costs[0].section], ['pcs', 'kitchen']);
 
   const bad = valid();
   bad.materials[0].unit = 'ft';
-  assert.deepEqual(errorsFor(bad), ['Υλικά #1 (Μελαμίνη): μη έγκυρη μονάδα τιμής.']);
+  bad.extras[0].section = 'garage';
+  assert.deepEqual(errorsFor(bad), [
+    'Υλικά #1 (Μελαμίνη): μη έγκυρη μονάδα τιμής.',
+    'Extras #1 (Magic Corner): μη έγκυρο είδος εργασίας.',
+  ]);
 });

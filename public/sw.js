@@ -3,7 +3,7 @@
 // up straight away) and the cached copy is used only when the network fails
 // or is too slow. The API is never cached here: the app keeps its own copy of
 // the prices, and admin data stays online-only.
-const CACHE = 'velokas-v3';
+const CACHE = 'velokas-v4';
 const NETWORK_TIMEOUT_MS = 4000;
 
 // Needed to open the app offline. Must all exist, or installing fails.

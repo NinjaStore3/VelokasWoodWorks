@@ -31,7 +31,7 @@ export async function quotePdf(doc, settings) {
   const brand = await createDoc(`${title} · ${businessName}`);
   const { pdf, fonts, color } = brand;
   pdf.setAuthor(businessName);
-  pdf.setSubject(doc.customer.name ? `Προσφορά προς ${doc.customer.name}` : 'Προσφορά κουζίνας');
+  pdf.setSubject([doc.subject || 'Προσφορά', doc.customer.name && `προς ${doc.customer.name}`].filter(Boolean).join(' '));
 
   const date = new Date(doc.date);
   const pages = [];
@@ -119,10 +119,15 @@ export async function quotePdf(doc, settings) {
     y -= 28;
   }
 
+  // In a quote for several jobs an extra's detail names its job; it is left
+  // out when the extra sits right under that job's own line.
+  let job = null;
   function itemRow(line, index) {
+    if (line.kind === 'base') job = line.name;
+    const detail = line.kind === 'extra' && line.detail === job ? '' : line.detail;
     const descWidth = COL.qty - 70 - COL.desc;
     const nameLines = wrap(line.name, fonts.bold, 10.5, descWidth);
-    const detailLines = line.detail ? wrap(line.detail, fonts.regular, 8.5, descWidth) : [];
+    const detailLines = detail ? wrap(detail, fonts.regular, 8.5, descWidth) : [];
     const height = 12 + nameLines.length * 13 + detailLines.length * 11;
     ensure(height + 2, tableHeader);
 
@@ -197,6 +202,7 @@ export async function quotePdf(doc, settings) {
   }
 
   // ---------- Notes, terms, signatures ----------
+  const paragraphHeight = (body) => 25 + wrap(body, fonts.regular, 9.5, CONTENT).length * 13;
   function paragraph(label, body, tone) {
     const lines = wrap(body, fonts.regular, 9.5, CONTENT);
     ensure(26 + Math.min(lines.length, 3) * 13);
@@ -210,8 +216,9 @@ export async function quotePdf(doc, settings) {
     y -= 10;
   }
 
+  const SIGNATURES = 40; // room to sign above the lines, plus their captions
   function signatures() {
-    ensure(52); // room to sign above the lines, plus their captions
+    ensure(SIGNATURES);
     // With space to spare they sit low on the page, like on a printed form.
     y = Math.min(y - 38, BOTTOM + 60);
     const width = CONTENT / 2 - 30;
@@ -232,7 +239,12 @@ export async function quotePdf(doc, settings) {
   doc.lines.forEach(itemRow);
   const notesDone = totals();
   if (doc.notes && !notesDone) paragraph('ΣΗΜΕΙΩΣΕΙΣ', doc.notes, 'text');
-  if (settings.terms) paragraph('ΟΡΟΙ', settings.terms, 'muted');
+  if (settings.terms) {
+    // The terms move to the next page with the signatures rather than leave
+    // them alone there.
+    ensure(Math.min(paragraphHeight(settings.terms) + SIGNATURES, 300));
+    paragraph('ΟΡΟΙ', settings.terms, 'muted');
+  }
   signatures();
 
   pages.forEach((current, index) => {

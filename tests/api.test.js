@@ -85,19 +85,37 @@ async function login(password = PASSWORD) {
   return { response, setCookie, cookie: setCookie.split(';')[0] };
 }
 
-test('public config serves the seeded prices from the mockup', async () => {
+test('public config serves the seeded prices and Panos\'s price list', async () => {
   const response = await call('GET', '/api/config');
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');
   const config = await response.json();
   assert.equal(config.settings.businessName, 'Velokas Woodworks');
   assert.equal(config.settings.vatRate, 24);
-  assert.deepEqual(config.materials.map((m) => [m.name, m.price]), [['Μελαμίνη', 320]]);
   assert.deepEqual(
-    config.extras.map((e) => e.price),
-    [195, 80, 40, 22, 40, 50, 100, 80],
+    config.materials.map((m) => [m.section, m.name, m.price, m.unit]),
+    [
+      ['kitchen', 'Μελαμίνη', 260, 'm'],
+      ['kitchen', 'PET', 330, 'm'],
+      ['kitchen', 'Thermofoil', 410, 'm'],
+      ['wardrobe', 'Ανοιγόμενη', 320, 'm'],
+      ['wardrobe', 'Συρόμενη', 390, 'm'],
+      ['door', 'Ανοιγόμενη', 400, 'pcs'],
+      ['door', 'Συρόμενη', 600, 'pcs'],
+    ],
   );
+  const extras = (section) => config.extras.filter((e) => e.section === section).map((e) => [e.name, e.price, e.unit]);
+  assert.deepEqual(extras('kitchen').map(([, price]) => price), [195, 80, 40, 22, 40, 50, 100, 80, 18, 5]);
+  assert.deepEqual(extras('kitchen').at(-2), ['LED φωτισμός', 18, 'm']);
+  assert.deepEqual(extras('wardrobe'), [
+    ['Συρτάρι κανονικό', 35, 'pcs'],
+    ['Συρτάρι soft close', 45, 'pcs'],
+    ['Παντελονοθήκη', 60, 'pcs'],
+    ['LED φωτισμός', 18, 'm'],
+    ['Πόμολα', 30, 'pcs'],
+  ]);
   assert.equal(config.costs.length, 6);
+  assert.equal('section' in config.costs[0], false, 'cost lines belong to no job');
 });
 
 test('static files are served with security headers', async () => {
@@ -145,7 +163,7 @@ test('saving settings updates what the calculator sees', async () => {
   const { cookie } = await login();
   const current = await (await call('GET', '/api/admin/config', { cookie })).json();
 
-  current.materials.push({ name: 'Λάκα', price: 450.5, unit: 'm2', active: true });
+  current.materials.splice(1, 0, { name: 'Λάκα', price: 450.5, unit: 'm2', section: 'kitchen', active: true });
   current.extras[0].price = 205;
   current.extras[7].active = false; // hide "Κάδος"
   current.settings.vatRate = 13;
@@ -154,15 +172,20 @@ test('saving settings updates what the calculator sees', async () => {
   assert.equal(saved.status, 200);
   const savedConfig = await saved.json();
   assert.equal(savedConfig.version, current.version + 1);
-  assert.equal(savedConfig.extras.length, 8, 'admins still see hidden items');
+  assert.equal(savedConfig.extras.length, 15, 'admins still see hidden items');
 
   const publicConfig = await (await call('GET', '/api/config')).json();
-  assert.deepEqual(publicConfig.materials.map((m) => m.name), ['Μελαμίνη', 'Λάκα']);
+  assert.deepEqual(publicConfig.materials.slice(0, 3).map((m) => m.name), ['Μελαμίνη', 'Λάκα', 'PET']);
   assert.equal(publicConfig.materials[1].price, 450.5);
-  assert.deepEqual(publicConfig.materials.map((m) => m.unit), ['m', 'm2'], 'existing materials stay per metre');
-  assert.equal('unit' in publicConfig.extras[0], false, 'only materials have a unit');
+  assert.equal(publicConfig.materials[1].unit, 'm2');
+  assert.deepEqual(
+    publicConfig.materials.map((m) => m.section),
+    ['kitchen', 'kitchen', 'kitchen', 'kitchen', 'wardrobe', 'wardrobe', 'door', 'door'],
+    'saving keeps every item in its job',
+  );
+  assert.equal(publicConfig.extras.find((e) => e.name === 'Παντελονοθήκη').section, 'wardrobe');
   assert.equal(publicConfig.extras[0].price, 205);
-  assert.equal(publicConfig.extras.length, 7, 'hidden extras are not public');
+  assert.equal(publicConfig.extras.length, 14, 'hidden extras are not public');
   assert.equal(publicConfig.settings.vatRate, 13);
   assert.equal(publicConfig.extras[0].id, current.extras[0].id, 'existing items keep their ids');
 

@@ -30,7 +30,8 @@ const SETTING_KEYS = {
 const NUMERIC_SETTINGS = new Set(['vatRate', 'validityDays', 'depositPercent']);
 
 const LIST_BY_KIND = { material: 'materials', extra: 'extras', cost: 'costs' };
-const MATERIAL_UNITS = new Set(['m', 'm2']);
+const UNITS = new Set(['m', 'm2', 'pcs']);
+const SECTIONS = new Set(['kitchen', 'wardrobe', 'door']);
 
 // Reads everything the calculator needs. Admins also get inactive items.
 export async function readConfig(db, { includeInactive = false } = {}) {
@@ -65,8 +66,12 @@ export async function readConfig(db, { includeInactive = false } = {}) {
     const list = config[LIST_BY_KIND[row.kind]];
     if (!list) continue;
     const item = { id: row.id, name: row.name, price: row.price_cents / 100, icon: row.icon };
-    // Price per metre ('m') or per square metre ('m2').
-    if (row.kind === 'material') item.unit = MATERIAL_UNITS.has(row.unit) ? row.unit : 'm';
+    // Materials and extras: how they're priced ('m', 'm2', 'pcs') and which
+    // kind of job they're for. Rows from before these columns fall back.
+    if (row.kind !== 'cost') {
+      item.unit = UNITS.has(row.unit) ? row.unit : row.kind === 'material' ? 'm' : 'pcs';
+      item.section = SECTIONS.has(row.section) ? row.section : 'kitchen';
+    }
     if (includeInactive) item.active = row.active === 1;
     list.push(item);
   }
@@ -87,7 +92,7 @@ export async function writeConfig(db, config) {
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
   );
   const insertItem = db.prepare(
-    'INSERT INTO items (id, kind, name, price_cents, icon, sort_order, active, unit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO items (id, kind, name, price_cents, icon, sort_order, active, unit, section) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
 
   const statements = [];
@@ -103,7 +108,7 @@ export async function writeConfig(db, config) {
   for (const [kind, key] of Object.entries(LIST_BY_KIND)) {
     config[key].forEach((item, index) => {
       statements.push(
-        insertItem.bind(item.id, kind, item.name, item.priceCents, item.icon, index, item.active ? 1 : 0, item.unit),
+        insertItem.bind(item.id, kind, item.name, item.priceCents, item.icon, index, item.active ? 1 : 0, item.unit, item.section),
       );
     });
   }

@@ -62,22 +62,72 @@ export function formatDate(date) {
   return longDate.format(date);
 }
 
-// How a material is priced: per metre of kitchen, or per square metre.
-export const MATERIAL_UNITS = {
-  m: { short: 'μ.', quantity: 'Μέτρα', price: 'Τιμή / μέτρο', example: 'π.χ. 5' },
-  m2: { short: 'τ.μ.', quantity: 'Τετραγωνικά', price: 'Τιμή / τ.μ.', example: 'π.χ. 12' },
+// The kinds of job a quote can cover; a quote has one or more of them.
+export const SECTIONS = {
+  kitchen: {
+    label: 'Κουζίνα',
+    of: 'κουζίνας',
+    icon: 'chef-hat',
+    pick: 'Υλικό',
+    materialsTitle: 'Υλικά κουζίνας',
+    extrasTitle: 'Extras κουζίνας',
+  },
+  wardrobe: {
+    label: 'Ντουλάπα',
+    of: 'ντουλάπας',
+    icon: 'shirt',
+    pick: 'Τύπος ντουλάπας',
+    materialsTitle: 'Τύποι ντουλάπας',
+    extrasTitle: 'Extras ντουλάπας',
+  },
+  door: {
+    label: 'Πόρτα',
+    of: 'πόρτας',
+    icon: 'door-open',
+    pick: 'Τύπος πόρτας',
+    materialsTitle: 'Τύποι πόρτας',
+    extrasTitle: 'Extras πόρτας',
+  },
+};
+export const SECTION_KEYS = Object.keys(SECTIONS);
+
+// Items saved before job types existed belong to the kitchen.
+export function sectionOf(item) {
+  return Object.hasOwn(SECTIONS, item?.section ?? '') ? item.section : 'kitchen';
+}
+
+// How an item is priced: per metre, per square metre or per piece.
+export const UNITS = {
+  m: { short: 'μ.', quantity: 'Μέτρα', price: 'Τιμή / μέτρο', example: 'π.χ. 5', per: 'Ανά μέτρο' },
+  m2: { short: 'τ.μ.', quantity: 'Τετραγωνικά', price: 'Τιμή / τ.μ.', example: 'π.χ. 12', per: 'Ανά τ.μ.' },
+  pcs: { short: 'τεμ.', quantity: 'Τεμάχια', price: 'Τιμή / τεμάχιο', example: 'π.χ. 2', per: 'Ανά τεμ.' },
 };
 
+// Materials are per metre unless set otherwise; extras per piece.
 export function materialUnit(material) {
-  return MATERIAL_UNITS[material?.unit] ?? MATERIAL_UNITS.m;
+  return UNITS[material?.unit] ?? UNITS.m;
 }
+export function extraUnit(extra) {
+  return UNITS[extra?.unit] ?? UNITS.pcs;
+}
+
+// «Προσφορά κουζίνας», «Προσφορά κουζίνας και ντουλάπας», …
+export function jobSubject(keys) {
+  const names = SECTION_KEYS.filter((key) => keys.includes(key)).map((key) => SECTIONS[key].of);
+  if (!names.length) return 'Προσφορά';
+  return `Προσφορά ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} και ${names.at(-1)}`}`;
+}
+
+const emptyJob = () => ({ materialId: null, qty: '', price: null });
 
 export function emptyDraft() {
   return {
-    meters: '',
-    materialId: null,
-    pricePerMeter: null,
-    extras: {},
+    sections: ['kitchen'], // the jobs this quote covers, in SECTION_KEYS order
+    combo: false, // chosen through «Συνδυασμός»
+    // Per job: the material, how much of it (in its unit) and a price that
+    // overrides the catalogue one (null = catalogue price).
+    jobs: { kitchen: emptyJob(), wardrobe: emptyJob(), door: emptyJob() },
+    extras: {}, // by extra id: { qty, price }
     other: '',
     otherLabel: '',
     discount: '',
@@ -89,27 +139,79 @@ export function emptyDraft() {
   };
 }
 
+const plainObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
+
+// Fills in what older drafts lack, so drafts and saved quotes from earlier
+// versions still open. Before job types a draft was a single kitchen:
+// { meters, materialId, pricePerMeter }.
+export function normaliseDraft(input) {
+  const raw = plainObject(input);
+  const draft = { ...emptyDraft(), ...raw };
+  draft.extras = plainObject(raw.extras);
+  draft.costs = plainObject(raw.costs);
+  draft.customer = { ...emptyDraft().customer, ...plainObject(raw.customer) };
+  if (draft.discountMode !== 'amount') draft.discountMode = 'percent';
+
+  const jobs = plainObject(raw.jobs);
+  draft.jobs = Object.fromEntries(SECTION_KEYS.map((key) => [key, { ...emptyJob(), ...plainObject(jobs[key]) }]));
+  if (!raw.jobs && ('meters' in raw || 'materialId' in raw || 'pricePerMeter' in raw)) {
+    draft.jobs.kitchen = { materialId: raw.materialId ?? null, qty: raw.meters ?? '', price: raw.pricePerMeter ?? null };
+  }
+  delete draft.meters;
+  delete draft.materialId;
+  delete draft.pricePerMeter;
+
+  const picked = Array.isArray(raw.sections) ? SECTION_KEYS.filter((key) => raw.sections.includes(key)) : [];
+  draft.sections = picked.length ? picked : ['kitchen'];
+  draft.combo = raw.combo === true;
+  return draft;
+}
+
+// One job of the quote: its material line and its extras.
+function computeSection(config, draft, key) {
+  const job = draft.jobs[key];
+  const materials = config.materials.filter((m) => sectionOf(m) === key);
+  const material = materials.find((m) => m.id === job.materialId) ?? materials[0] ?? null;
+  const qty = parseAmount(job.qty) ?? 0;
+  const priceCents = toCents(job.price == null ? material?.price ?? 0 : parseAmount(job.price) ?? 0);
+  const baseCents = Math.round(qty * priceCents);
+
+  const extras = config.extras
+    .filter((extra) => sectionOf(extra) === key)
+    .map((extra) => {
+      const entry = draft.extras[extra.id] ?? {};
+      const unit = extraUnit(extra);
+      // Pieces are whole numbers; metres of LED strip can be 3,5.
+      const count = (unit === UNITS.pcs ? parseQty(entry.qty) : parseAmount(entry.qty ?? '')) ?? 0;
+      const unitCents = toCents(entry.price == null ? extra.price : parseAmount(entry.price) ?? 0);
+      return { id: extra.id, name: extra.name, icon: extra.icon, unit, qty: count, unitCents, totalCents: Math.round(count * unitCents) };
+    });
+  const extrasCents = extras.reduce((sum, extra) => sum + extra.totalCents, 0);
+
+  return {
+    key,
+    ...SECTIONS[key],
+    material,
+    materials,
+    unit: materialUnit(material),
+    qty, // in the material's unit
+    priceCents,
+    baseCents,
+    extras,
+    extrasCents,
+    totalCents: baseCents + extrasCents,
+  };
+}
+
 // The whole quote, derived from the admin config plus what's typed in the
 // form (the "draft", which keeps raw input strings). Invalid inputs count as 0;
 // the UI flags them separately.
-export function computeQuote(config, draft) {
-  const material = config.materials.find((m) => m.id === draft.materialId) ?? config.materials[0] ?? null;
-
-  const meters = parseAmount(draft.meters) ?? 0;
-  const pricePerMeter =
-    draft.pricePerMeter == null ? material?.price ?? 0 : parseAmount(draft.pricePerMeter) ?? 0;
-  const pricePerMeterCents = toCents(pricePerMeter);
-  const baseCents = Math.round(meters * pricePerMeterCents);
-
-  const extras = config.extras.map((extra) => {
-    const entry = draft.extras[extra.id] ?? {};
-    const qty = parseQty(entry.qty) ?? 0;
-    const unitPrice = entry.price == null ? extra.price : parseAmount(entry.price) ?? 0;
-    const unitCents = toCents(unitPrice);
-    return { id: extra.id, name: extra.name, icon: extra.icon, qty, unitCents, totalCents: qty * unitCents };
-  });
+export function computeQuote(config, input) {
+  const draft = normaliseDraft(input);
+  const sections = draft.sections.map((key) => computeSection(config, draft, key));
+  const baseCents = sections.reduce((sum, section) => sum + section.baseCents, 0);
+  const pickedCents = sections.reduce((sum, section) => sum + section.extrasCents, 0);
   const otherCents = toCents(parseAmount(draft.other) ?? 0);
-  const pickedCents = extras.reduce((sum, extra) => sum + extra.totalCents, 0);
   const extrasCents = pickedCents + otherCents;
 
   const subtotalCents = baseCents + extrasCents;
@@ -136,12 +238,9 @@ export function computeQuote(config, draft) {
   const profitCents = totals.netCents - costCents;
 
   return {
-    material,
-    unit: materialUnit(material),
-    meters, // in the material's unit: metres or square metres
-    pricePerMeterCents,
+    sections,
     baseCents,
-    extras,
+    extras: sections.flatMap((section) => section.extras),
     pickedCents,
     otherCents,
     extrasCents,
@@ -189,28 +288,32 @@ export function addDays(date, days) {
 // show. Never contains internal costs.
 export function buildQuoteDoc(quote, draft, { date = new Date(), validityDays = 0 } = {}) {
   const lines = [];
-  if (quote.baseCents > 0) {
-    lines.push({
-      kind: 'base',
-      name: 'Βασική κουζίνα',
-      detail: quote.material?.name ?? '',
-      qty: quote.meters,
-      unit: quote.unit.short,
-      unitCents: quote.pricePerMeterCents,
-      totalCents: quote.baseCents,
-    });
-  }
-  for (const extra of quote.extras) {
-    if (extra.qty > 0) {
+  // In a quote for several jobs each extra says which job it belongs to.
+  const several = quote.sections.length > 1;
+  for (const section of quote.sections) {
+    if (section.baseCents > 0) {
       lines.push({
-        kind: 'extra',
-        name: extra.name,
-        detail: '',
-        qty: extra.qty,
-        unit: 'τεμ.',
-        unitCents: extra.unitCents,
-        totalCents: extra.totalCents,
+        kind: 'base',
+        name: section.label,
+        detail: section.material?.name ?? '',
+        qty: section.qty,
+        unit: section.unit.short,
+        unitCents: section.priceCents,
+        totalCents: section.baseCents,
       });
+    }
+    for (const extra of section.extras) {
+      if (extra.qty > 0) {
+        lines.push({
+          kind: 'extra',
+          name: extra.name,
+          detail: several ? section.label : '',
+          qty: extra.qty,
+          unit: extra.unit.short,
+          unitCents: extra.unitCents,
+          totalCents: extra.totalCents,
+        });
+      }
     }
   }
   if (quote.otherCents > 0) {
@@ -229,6 +332,7 @@ export function buildQuoteDoc(quote, draft, { date = new Date(), validityDays = 
   return {
     v: 1,
     number: draft.quoteRef?.number ?? null,
+    subject: jobSubject(quote.sections.map((section) => section.key)),
     date: date.toISOString(),
     validityDays,
     customer: {
@@ -247,18 +351,20 @@ export function buildQuoteDoc(quote, draft, { date = new Date(), validityDays = 
 }
 
 function lineText(line) {
+  const detail = line.detail ? ` (${line.detail})` : '';
   if (line.kind === 'base') {
-    const material = line.detail ? ` (${line.detail})` : '';
-    return `${line.name}${material}: ${formatNumber(line.qty)} ${line.unit || 'μ.'} × ${formatMoney(line.unitCents)} = ${formatMoney(line.totalCents)}`;
+    return `${line.name}${detail}: ${formatNumber(line.qty)} ${line.unit || 'μ.'} × ${formatMoney(line.unitCents)} = ${formatMoney(line.totalCents)}`;
   }
   if (line.kind === 'other') return `• ${line.name}: ${formatMoney(line.totalCents)}`;
-  return `• ${line.name}: ${line.qty} × ${formatMoney(line.unitCents)} = ${formatMoney(line.totalCents)}`;
+  // Pieces read "2 × 45 €"; metres "3,5 μ. × 18 €".
+  const qty = line.unit && line.unit !== 'τεμ.' ? `${formatNumber(line.qty)} ${line.unit}` : formatNumber(line.qty);
+  return `• ${line.name}${detail}: ${qty} × ${formatMoney(line.unitCents)} = ${formatMoney(line.totalCents)}`;
 }
 
 // Plain-text quote for Viber / Messenger / email. Never includes internal costs.
 export function buildShareText(doc, { businessName }) {
   const date = new Date(doc.date);
-  const title = doc.number ? `Προσφορά ${doc.number}` : 'Προσφορά κουζίνας';
+  const title = doc.number ? `Προσφορά ${doc.number}` : doc.subject || 'Προσφορά κουζίνας';
   const out = [`${businessName} · ${title}`, formatDate(date)];
   if (doc.customer.name) out.push(`Προς: ${doc.customer.name}`);
   out.push('');
