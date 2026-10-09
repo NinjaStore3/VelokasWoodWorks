@@ -28,9 +28,9 @@ test('normalises a valid config', () => {
   assert.equal(config.version, 3);
   assert.equal(config.settings.businessName, 'Velokas Woodworks');
   assert.equal(config.settings.vatRate, 24);
-  assert.deepEqual(config.materials, [{ id: 1, name: 'Μελαμίνη', priceCents: 32000, icon: '', active: true }]);
-  assert.deepEqual(config.extras[0], { id: 2, name: 'Magic Corner', priceCents: 19550, icon: 'square-round-corner', active: true });
-  assert.deepEqual(config.extras[1], { id: null, name: 'Νέο extra', priceCents: 1000, icon: '', active: true });
+  assert.deepEqual(config.materials, [{ id: 1, name: 'Μελαμίνη', priceCents: 32000, icon: '', unit: 'm', active: true }]);
+  assert.deepEqual(config.extras[0], { id: 2, name: 'Magic Corner', priceCents: 19550, icon: 'square-round-corner', unit: 'pcs', active: true });
+  assert.deepEqual(config.extras[1], { id: null, name: 'Νέο extra', priceCents: 1000, icon: '', unit: 'pcs', active: true });
   assert.equal(config.costs[0].active, false);
 });
 
@@ -158,4 +158,17 @@ test('only known quote statuses are accepted', () => {
   assert.equal(validateStatus({ status: 'accepted' }), 'accepted');
   assert.throws(() => validateStatus({ status: 'won' }), ValidationError);
   assert.throws(() => validateStatus(null), ValidationError);
+});
+
+test('materials are priced per metre or per square metre', () => {
+  const body = valid();
+  body.materials.push({ name: 'Πάγκος χαλαζία', price: 210, unit: 'm2', active: true });
+  body.extras[0].unit = 'm2'; // only materials have a unit
+  const config = validateConfig(body);
+  assert.deepEqual(config.materials.map((m) => m.unit), ['m', 'm2']);
+  assert.equal(config.extras[0].unit, 'pcs');
+
+  const bad = valid();
+  bad.materials[0].unit = 'ft';
+  assert.deepEqual(errorsFor(bad), ['Υλικά #1 (Μελαμίνη): μη έγκυρη μονάδα τιμής.']);
 });

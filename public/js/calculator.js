@@ -9,6 +9,7 @@ import {
   formatMoney,
   formatNumber,
   formatPercent,
+  materialUnit,
   parseAmount,
   parseQty,
   toCents,
@@ -144,12 +145,13 @@ export function createCalculator({ onQuoteSaved } = {}) {
     const material = currentMaterial();
     materialSelect.replaceChildren(
       ...config.materials.map((m) =>
-        h('option', { value: String(m.id) }, `${m.name} — ${formatMoney(toCents(m.price))}/μ.`),
+        h('option', { value: String(m.id) }, `${m.name} — ${formatMoney(toCents(m.price))}/${materialUnit(m).short}`),
       ),
     );
     materialSelect.disabled = !material;
     if (material) materialSelect.value = String(material.id);
     metersInput.value = draft.meters;
+    showUnit(material);
     ppmInput.value = draft.pricePerMeter ?? (material ? formatInput(material.price) : '');
     discountInput.value = draft.discount ?? '';
     syncDiscountMode();
@@ -297,14 +299,14 @@ export function createCalculator({ onQuoteSaved } = {}) {
     setInvalid(ppmInput, draft.pricePerMeter != null && parseAmount(draft.pricePerMeter) === null);
     const customPpm = material && draft.pricePerMeter != null && parseAmount(draft.pricePerMeter) !== material.price;
     resetPpm.hidden = !customPpm;
-    if (customPpm) $('span', resetPpm).textContent = `Επαναφορά στα ${formatMoney(toCents(material.price))}/μ.`;
+    if (customPpm) $('span', resetPpm).textContent = `Επαναφορά στα ${formatMoney(toCents(material.price))}/${quote.unit.short}`;
     baseFormula.replaceChildren(
       ...(quote.meters > 0
         ? [
-            h('span', {}, `${formatNumber(quote.meters)} μ. × ${formatMoney(quote.pricePerMeterCents)}`),
+            h('span', {}, `${formatNumber(quote.meters)} ${quote.unit.short} × ${formatMoney(quote.pricePerMeterCents)}`),
             h('strong', {}, formatMoney(quote.baseCents)),
           ]
-        : [h('span', {}, 'Γράψε τα μέτρα για να βγει η τιμή της βασικής κουζίνας.')]),
+        : [h('span', {}, `Γράψε τα ${quote.unit.quantity.toLowerCase()} για να βγει η τιμή της βασικής κουζίνας.`)]),
     );
 
     for (const line of quote.extras) {
@@ -341,6 +343,15 @@ export function createCalculator({ onQuoteSaved } = {}) {
 
     if (sheet.open) renderResult();
     scheduleSave();
+  }
+
+  // Step 1 speaks in the chosen material's unit: metres or square metres.
+  function showUnit(material) {
+    const unit = materialUnit(material);
+    $('#qtyLabel').textContent = unit.quantity;
+    $('#qtyUnit').textContent = unit.short;
+    $('#ppmLabel').textContent = unit.price;
+    metersInput.placeholder = unit.example;
   }
 
   function syncDiscountMode() {
@@ -437,7 +448,7 @@ export function createCalculator({ onQuoteSaved } = {}) {
 
       const lines = [];
       if (q.baseCents > 0) {
-        const detail = `${q.material ? `${q.material.name} · ` : ''}${formatNumber(q.meters)} μ. × ${formatMoney(q.pricePerMeterCents)}`;
+        const detail = `${q.material ? `${q.material.name} · ` : ''}${formatNumber(q.meters)} ${q.unit.short} × ${formatMoney(q.pricePerMeterCents)}`;
         lines.push(breakdownLine('ruler', 'var(--amber)', 'Βασική κουζίνα', detail, q.baseCents));
       }
       q.extras.forEach((extra, index) => {
@@ -501,6 +512,7 @@ export function createCalculator({ onQuoteSaved } = {}) {
     draft.materialId = Number(materialSelect.value);
     draft.pricePerMeter = null;
     ppmInput.value = formatInput(currentMaterial().price);
+    showUnit(currentMaterial());
     update();
   });
   metersInput.addEventListener('input', () => {

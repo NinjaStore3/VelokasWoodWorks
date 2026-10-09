@@ -30,13 +30,15 @@ const SETTING_KEYS = {
 const NUMERIC_SETTINGS = new Set(['vatRate', 'validityDays', 'depositPercent']);
 
 const LIST_BY_KIND = { material: 'materials', extra: 'extras', cost: 'costs' };
+const MATERIAL_UNITS = new Set(['m', 'm2']);
 
 // Reads everything the calculator needs. Admins also get inactive items.
 export async function readConfig(db, { includeInactive = false } = {}) {
   const [settingsResult, itemsResult] = await db.batch([
     db.prepare('SELECT key, value FROM settings'),
+    // SELECT *: reads keep working while a deploy waits for a new column.
     db.prepare(
-      `SELECT id, kind, name, price_cents, icon, active
+      `SELECT *
          FROM items
         ${includeInactive ? '' : 'WHERE active = 1'}
         ORDER BY kind, sort_order, id`,
@@ -63,6 +65,8 @@ export async function readConfig(db, { includeInactive = false } = {}) {
     const list = config[LIST_BY_KIND[row.kind]];
     if (!list) continue;
     const item = { id: row.id, name: row.name, price: row.price_cents / 100, icon: row.icon };
+    // Price per metre ('m') or per square metre ('m2').
+    if (row.kind === 'material') item.unit = MATERIAL_UNITS.has(row.unit) ? row.unit : 'm';
     if (includeInactive) item.active = row.active === 1;
     list.push(item);
   }
@@ -83,7 +87,7 @@ export async function writeConfig(db, config) {
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
   );
   const insertItem = db.prepare(
-    'INSERT INTO items (id, kind, name, price_cents, icon, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO items (id, kind, name, price_cents, icon, sort_order, active, unit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   );
 
   const statements = [];
@@ -99,7 +103,7 @@ export async function writeConfig(db, config) {
   for (const [kind, key] of Object.entries(LIST_BY_KIND)) {
     config[key].forEach((item, index) => {
       statements.push(
-        insertItem.bind(item.id, kind, item.name, item.priceCents, item.icon, index, item.active ? 1 : 0),
+        insertItem.bind(item.id, kind, item.name, item.priceCents, item.icon, index, item.active ? 1 : 0, item.unit),
       );
     });
   }

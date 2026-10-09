@@ -80,7 +80,7 @@ function errorResponse(error) {
     const headers = error.extra.allow ? { Allow: error.extra.allow } : {};
     return json({ error: error.message }, { status: error.status, headers });
   }
-  if (/no such table/i.test(String(error?.message))) {
+  if (/no such (table|column)/i.test(String(error?.message))) {
     return json(
       { error: 'Η βάση δεδομένων δεν έχει στηθεί ακόμα. Τρέξε: npm run db:migrate:remote' },
       { status: 503 },

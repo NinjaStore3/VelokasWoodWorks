@@ -1,5 +1,5 @@
 import { api } from './api.js';
-import { formatInput, parseAmount, parseQty } from './calc.js';
+import { MATERIAL_UNITS, formatInput, parseAmount, parseQty } from './calc.js';
 import { $, h, toast } from './dom.js';
 import { PICKER_ICONS, icon, tileTint } from './icons.js';
 import { loginCard, session, unconfiguredNotice } from './session.js';
@@ -9,11 +9,12 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LISTS = {
   materials: {
     title: 'Υλικά',
-    eyebrow: 'Τιμή ανά μέτρο',
+    eyebrow: 'Τιμή ανά μέτρο ή τ.μ.',
     accent: 'amber',
     icon: 'layers',
     unit: '€/μ.',
-    desc: 'Οι επιλογές της λίστας «Υλικό». Με τον διακόπτη κρύβεις κάτι χωρίς να το σβήσεις.',
+    hasUnit: true, // priced per metre or per square metre
+    desc: 'Οι επιλογές της λίστας «Υλικό». Διάλεξε αν η τιμή είναι ανά μέτρο ή ανά τετραγωνικό. Με τον διακόπτη κρύβεις κάτι χωρίς να το σβήσεις.',
     addLabel: 'Προσθήκη υλικού',
     hasIcon: false,
     newIcon: '',
@@ -62,6 +63,7 @@ function toDraft(config) {
       name: item.name,
       price: formatInput(item.price),
       icon: item.icon || '',
+      unit: item.unit === 'm2' ? 'm2' : 'm',
       active: item.active !== false,
     }));
   return {
@@ -86,12 +88,13 @@ function toDraft(config) {
 
 // Draft -> request body for PUT /api/admin/config.
 function toPayload(draft) {
-  const items = (list) =>
+  const items = (list, { withUnit = false } = {}) =>
     list.map((item) => ({
       id: item.id ?? undefined,
       name: item.name.trim(),
       price: parseAmount(item.price),
       icon: item.icon || undefined,
+      unit: withUnit ? item.unit : undefined,
       active: item.active,
     }));
   return {
@@ -108,7 +111,7 @@ function toPayload(draft) {
       validityDays: parseQty(draft.settings.validityDays),
       depositPercent: parseAmount(draft.settings.depositPercent),
     },
-    materials: items(draft.materials),
+    materials: items(draft.materials, { withUnit: true }),
     extras: items(draft.extras),
     costs: items(draft.costs),
   };
@@ -334,11 +337,13 @@ export function createSettings({ onSaved }) {
         changed(event.target);
       },
     });
+    const priceUnit = () => (meta.hasUnit ? `€/${MATERIAL_UNITS[item.unit].short}` : meta.unit);
+    const priceSuffix = h('span', { class: 'suffix' }, priceUnit());
     const price = h('input', {
       value: item.price,
       inputmode: 'decimal',
       placeholder: '0',
-      'aria-label': `Τιμή σε ${meta.unit}`,
+      'aria-label': `Τιμή σε ${priceUnit()}`,
       'data-field': 'price',
       oninput: (event) => {
         item.price = event.target.value;
@@ -370,10 +375,11 @@ export function createSettings({ onSaved }) {
         { type: 'button', class: 'icon-btn danger', 'aria-label': 'Διαγραφή', onclick: () => removeItem(key, item) },
         icon('trash-2'),
       ),
+      meta.hasUnit && unitPicker(),
       h(
         'div',
         { class: 'item-tools' },
-        h('label', { class: 'price-field input-wrap' }, price, h('span', { class: 'suffix' }, meta.unit)),
+        h('label', { class: 'price-field input-wrap' }, price, priceSuffix),
         h('label', { class: 'switch', title: 'Εμφανίζεται στην κοστολόγηση' }, toggle, h('span', { class: 'track' })),
         h(
           'button',
@@ -387,13 +393,39 @@ export function createSettings({ onSaved }) {
         ),
       ),
     );
+    // Per metre or per square metre (materials only).
+    function unitPicker() {
+      const buttons = [
+        ['m', 'Ανά μέτρο'],
+        ['m2', 'Ανά τ.μ.'],
+      ].map(([unit, label]) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            'aria-pressed': String(item.unit === unit),
+            onclick: (event) => {
+              if (item.unit === unit) return;
+              item.unit = unit;
+              for (const b of buttons) b.setAttribute('aria-pressed', String(b === event.currentTarget));
+              priceSuffix.textContent = priceUnit();
+              price.setAttribute('aria-label', `Τιμή σε ${priceUnit()}`);
+              changed();
+            },
+          },
+          label,
+        ),
+      );
+      return h('div', { class: 'segmented unit-picker', role: 'group', 'aria-label': 'Η τιμή είναι' }, buttons);
+    }
+
     return row;
   }
 
   // ---------- List actions ----------
   function addItem(key) {
     const meta = LISTS[key];
-    draft[key].push({ key: ++keySeq, id: null, name: '', price: '', icon: meta.newIcon, active: true });
+    draft[key].push({ key: ++keySeq, id: null, name: '', price: '', icon: meta.newIcon, unit: 'm', active: true });
     renderList(key);
     changed();
     const row = listEls[key].lastElementChild;

@@ -174,6 +174,25 @@ test('the quote document carries what the customer sees, and no internal costs',
   assert.doesNotMatch(text, /999|Πορτάκια|Κέρδος/);
 });
 
+test('a material priced per square metre carries its unit to the quote', () => {
+  const withSquareMetres = {
+    ...config,
+    materials: [...config.materials, { id: 12, name: 'Πάγκος χαλαζία', price: 210, unit: 'm2', icon: '' }],
+  };
+  const input = draft({ materialId: 12, meters: '3,5' });
+  const quote = computeQuote(withSquareMetres, input);
+  assert.equal(quote.unit.short, 'τ.μ.');
+  assert.equal(quote.baseCents, 73500);
+
+  const doc = buildQuoteDoc(quote, input, { date: new Date(2026, 9, 9, 12) });
+  assert.deepEqual([doc.lines[0].detail, doc.lines[0].qty, doc.lines[0].unit], ['Πάγκος χαλαζία', 3.5, 'τ.μ.']);
+  const text = buildShareText(doc, { businessName: 'Velokas Woodworks' });
+  assert.match(text, /Βασική κουζίνα \(Πάγκος χαλαζία\): 3,5 τ\.μ\. × 210 € = 735 €/);
+
+  // Materials without a unit (saved before units existed) are per metre.
+  assert.equal(computeQuote(config, draft({ meters: '2' })).unit.short, 'μ.');
+});
+
 test('an unsaved quote with nothing optional reads simply', () => {
   const input = draft({ other: '80' });
   const doc = buildQuoteDoc(computeQuote(config, input), input, { date: new Date(2026, 0, 2, 12) });
