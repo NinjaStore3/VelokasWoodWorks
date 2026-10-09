@@ -62,6 +62,16 @@ export function formatDate(date) {
   return longDate.format(date);
 }
 
+// How a material is priced: per metre of kitchen, or per square metre.
+export const MATERIAL_UNITS = {
+  m: { short: 'μ.', quantity: 'Μέτρα', price: 'Τιμή / μέτρο', example: 'π.χ. 5' },
+  m2: { short: 'τ.μ.', quantity: 'Τετραγωνικά', price: 'Τιμή / τ.μ.', example: 'π.χ. 12' },
+};
+
+export function materialUnit(material) {
+  return MATERIAL_UNITS[material?.unit] ?? MATERIAL_UNITS.m;
+}
+
 export function emptyDraft() {
   return {
     meters: '',
@@ -127,7 +137,8 @@ export function computeQuote(config, draft) {
 
   return {
     material,
-    meters,
+    unit: materialUnit(material),
+    meters, // in the material's unit: metres or square metres
     pricePerMeterCents,
     baseCents,
     extras,
@@ -184,7 +195,7 @@ export function buildQuoteDoc(quote, draft, { date = new Date(), validityDays = 
       name: 'Βασική κουζίνα',
       detail: quote.material?.name ?? '',
       qty: quote.meters,
-      unit: 'μ.',
+      unit: quote.unit.short,
       unitCents: quote.pricePerMeterCents,
       totalCents: quote.baseCents,
     });
@@ -238,7 +249,7 @@ export function buildQuoteDoc(quote, draft, { date = new Date(), validityDays = 
 function lineText(line) {
   if (line.kind === 'base') {
     const material = line.detail ? ` (${line.detail})` : '';
-    return `${line.name}${material}: ${formatNumber(line.qty)} μ. × ${formatMoney(line.unitCents)} = ${formatMoney(line.totalCents)}`;
+    return `${line.name}${material}: ${formatNumber(line.qty)} ${line.unit || 'μ.'} × ${formatMoney(line.unitCents)} = ${formatMoney(line.totalCents)}`;
   }
   if (line.kind === 'other') return `• ${line.name}: ${formatMoney(line.totalCents)}`;
   return `• ${line.name}: ${line.qty} × ${formatMoney(line.unitCents)} = ${formatMoney(line.totalCents)}`;

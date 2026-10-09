@@ -145,7 +145,7 @@ test('saving settings updates what the calculator sees', async () => {
   const { cookie } = await login();
   const current = await (await call('GET', '/api/admin/config', { cookie })).json();
 
-  current.materials.push({ name: 'Λάκα', price: 450.5, active: true });
+  current.materials.push({ name: 'Λάκα', price: 450.5, unit: 'm2', active: true });
   current.extras[0].price = 205;
   current.extras[7].active = false; // hide "Κάδος"
   current.settings.vatRate = 13;
@@ -159,6 +159,8 @@ test('saving settings updates what the calculator sees', async () => {
   const publicConfig = await (await call('GET', '/api/config')).json();
   assert.deepEqual(publicConfig.materials.map((m) => m.name), ['Μελαμίνη', 'Λάκα']);
   assert.equal(publicConfig.materials[1].price, 450.5);
+  assert.deepEqual(publicConfig.materials.map((m) => m.unit), ['m', 'm2'], 'existing materials stay per metre');
+  assert.equal('unit' in publicConfig.extras[0], false, 'only materials have a unit');
   assert.equal(publicConfig.extras[0].price, 205);
   assert.equal(publicConfig.extras.length, 7, 'hidden extras are not public');
   assert.equal(publicConfig.settings.vatRate, 13);

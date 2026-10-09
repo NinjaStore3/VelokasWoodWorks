@@ -1011,6 +1011,9 @@ dialog.sheet[open] .sheet-body { animation: sheet-up 0.34s cubic-bezier(0.2, 0.8
 .admin-item .item-tools .price-field { flex: 1; min-width: 0; }
 .admin-item .item-tools .price-field input { height: 44px; font-size: 16px; padding-right: 52px; }
 .admin-item .item-tools .price-field .suffix { font-size: 13px; }
+.admin-item .unit-picker { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }
+.admin-item .unit-picker button { height: 40px; font-size: 14.5px; }
+.admin-item .item-tools .price-field input { padding-right: 62px; }
 .admin-item.is-off { opacity: 0.62; }
 .admin-item.is-off .tile-btn { filter: grayscale(1); }
 

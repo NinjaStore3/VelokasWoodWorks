@@ -21,7 +21,7 @@ Four tabs along the bottom of the screen.
 
 **Κοστολόγηση (calculator)**, open to anyone with the link:
 
-1. **Βασική κουζίνα:** pick the material and type the metres. The price per metre comes from Settings and can be changed for a single quote.
+1. **Βασική κουζίνα:** pick the material and type the metres, or the square metres for a material priced per τ.μ. The price comes from Settings and can be changed for a single quote.
 2. **Extras:** each item has a quantity stepper and a unit price that can also be changed per quote, plus an «Άλλο extra» with its own description.
 3. **Πελάτης & έκπτωση:** customer name, phone and area, a discount in % or €, and notes printed on the quote.
 4. **Εσωτερική κοστολόγηση (optional):** Panos's own costs (parts, doors, hardware, countertop, labour, transport) show the profit and margin. They never appear in anything the customer sees.
@@ -42,14 +42,14 @@ Whatever is typed is kept on the phone, so a refresh doesn't lose it.
 
 - Business name, subtitle, VAT rate
 - Details printed on the PDF: phone, email, address, ΑΦΜ, how many days a quote is valid, deposit %, terms
-- Materials (price per metre), extras (price per piece and icon) and internal cost lines: add, rename, reprice, hide, reorder and delete, then **Αποθήκευση**
+- Materials (priced per metre or per square metre), extras (price per piece and icon) and internal cost lines: add, rename, reprice, hide, reorder and delete, then **Αποθήκευση**
 
 **Works offline and installs like an app.** After the first visit the app opens without internet: calculator, PDFs and cut lists work with the last prices loaded. The archive and saving quotes need a connection. On a computer, Chrome or Edge show an **Εγκατάσταση** button in the header. On a phone, use **Add to Home screen**.
 
 Calculation:
 
 ```
-base     = metres × price per metre
+base     = quantity × material price  (metres or square metres, as set per material)
 extras   = Σ quantity × unit price  +  other extra
 subtotal = base + extras
 net      = subtotal − discount        (discount: % of the subtotal, or an amount)

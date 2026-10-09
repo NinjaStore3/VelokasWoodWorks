@@ -21,6 +21,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const ICON_RE = /^[a-z0-9-]{1,40}$/;
 
+export const MATERIAL_UNITS = ['m', 'm2'];
+
 const LIST_LABELS = {
   materials: 'Υλικά',
   extras: 'Extras',
@@ -99,7 +101,14 @@ function validateItems(key, input, max, errors) {
       else errors.push(`${where}: μη έγκυρο εικονίδιο.`);
     }
 
-    return { id, name, priceCents: priceCents ?? 0, icon, active: item.active !== false };
+    // Materials are priced per metre or per square metre; the rest per piece.
+    let unit = key === 'materials' ? 'm' : 'pcs';
+    if (key === 'materials' && item.unit !== undefined && item.unit !== null) {
+      if (MATERIAL_UNITS.includes(item.unit)) unit = item.unit;
+      else errors.push(`${where} (${name || 'χωρίς όνομα'}): μη έγκυρη μονάδα τιμής.`);
+    }
+
+    return { id, name, priceCents: priceCents ?? 0, icon, unit, active: item.active !== false };
   });
 }
 
