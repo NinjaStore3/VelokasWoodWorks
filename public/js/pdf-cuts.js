@@ -2,7 +2,7 @@
 // parts with their banding, and every sheet drawn to scale.
 import { formatDate, formatMoney, formatNumber, formatPercent } from './calc.js';
 import { bandLabel, fitLabel, partSize, sizeLabel } from './cutplan.js';
-import { PAGE, createDoc, painter } from './pdf-common.js';
+import { PAGE, createDoc, drawBandLogo, drawSmallBandLogo, painter } from './pdf-common.js';
 
 const { width: W, height: H, margin: M } = PAGE;
 const CONTENT = W - 2 * M;
@@ -35,7 +35,8 @@ const COL = {
 
 export async function cutsPdf(plan, settings) {
   const businessName = settings.businessName || 'Velokas Woodworks';
-  const { pdf, fonts, logo, color, rgb, degrees } = await createDoc(`Λίστα κοπής · ${businessName}`);
+  const brand = await createDoc(`Λίστα κοπής · ${businessName}`);
+  const { pdf, fonts, color, rgb, degrees } = brand;
   pdf.setAuthor(businessName);
   pdf.setSubject('Λίστα και σχέδιο κοπής');
 
@@ -51,14 +52,13 @@ export async function cutsPdf(plan, settings) {
     p.box(0, H, W, band, { fill: 'walnut' });
     p.box(0, H - band, W, first ? 4 : 3, { fill: 'amber' });
     if (first) {
-      page.drawImage(logo, { x: M, y: H - 64, width: 44, height: 44 });
-      p.text(businessName, M + 56, H - 38, { font: fonts.bold, size: 16, tone: 'white' });
-      p.text('Λίστα και σχέδιο κοπής', M + 56, H - 55, { size: 9, tone: 'tan' });
+      const contact = [settings.phone && `Τηλ. ${settings.phone}`, settings.email].filter(Boolean).join('   ·   ');
+      drawBandLogo(page, p, brand, { x: M - 3, centerY: H - 42, markHeight: 58, wordHeight: 23, lines: contact ? [contact] : [] });
       p.right('ΛΙΣΤΑ ΚΟΠΗΣ', W - M, H - 36, { font: fonts.bold, size: 8.5, tone: 'amber' });
       p.right(formatDate(today), W - M, H - 54, { size: 9, tone: 'tan' });
     } else {
-      p.text(businessName, M, H - 33, { font: fonts.bold, size: 12, tone: 'white' });
-      p.right('Λίστα κοπής · συνέχεια', W - M, H - 33, { size: 9, tone: 'tan' });
+      drawSmallBandLogo(page, brand, { x: M - 2, centerY: H - 27 });
+      p.right('Λίστα κοπής · συνέχεια', W - M, H - 30, { size: 9, tone: 'tan' });
     }
     return H - band - 24;
   }

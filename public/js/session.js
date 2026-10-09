@@ -78,8 +78,8 @@ export function loginCard({ title, text, message = '', onSuccess }) {
 
   return h(
     'section',
-    { class: 'card login-card', 'data-accent': 'rose' },
-    h('span', { class: 'badge-icon' }, icon('lock')),
+    { class: 'card login-card', 'data-accent': 'amber' },
+    h('div', { class: 'login-brand' }, h('img', { src: '/img/logo.webp', alt: 'Velokas Woodworks', width: '720', height: '620' })),
     h('h2', {}, title),
     h('p', {}, text),
     h(

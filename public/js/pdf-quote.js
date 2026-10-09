@@ -1,7 +1,7 @@
 // A4 PDF of a quote (the "doc" from buildQuoteDoc / the archive). Never
 // includes internal costs: the doc doesn't carry them.
 import { addDays, formatDate, formatMoney, formatNumber } from './calc.js';
-import { PAGE, createDoc, painter, wrap } from './pdf-common.js';
+import { PAGE, createDoc, drawBandLogo, drawSmallBandLogo, painter, wrap } from './pdf-common.js';
 
 const { width: W, height: H, margin: M } = PAGE;
 const CONTENT = W - 2 * M;
@@ -28,7 +28,8 @@ function qtyLabel(line) {
 export async function quotePdf(doc, settings) {
   const businessName = settings.businessName || 'Velokas Woodworks';
   const title = doc.number ? `Προσφορά ${doc.number}` : 'Προσφορά';
-  const { pdf, fonts, logo, color } = await createDoc(`${title} · ${businessName}`);
+  const brand = await createDoc(`${title} · ${businessName}`);
+  const { pdf, fonts, color } = brand;
   pdf.setAuthor(businessName);
   pdf.setSubject(doc.customer.name ? `Προσφορά προς ${doc.customer.name}` : 'Προσφορά κουζίνας');
 
@@ -43,12 +44,7 @@ export async function quotePdf(doc, settings) {
     const band = 104;
     p.box(0, H, W, band, { fill: 'walnut' });
     p.box(0, H - band, W, 4, { fill: 'amber' });
-    page.drawImage(logo, { x: M, y: H - 78, width: 52, height: 52 });
-
-    p.text(businessName, M + 66, H - 46, { font: fonts.bold, size: 19, tone: 'white' });
-    contactLines(settings).forEach((line, index) => {
-      p.text(line, M + 66, H - 63 - index * 13, { size: 8.5, tone: 'tan' });
-    });
+    drawBandLogo(page, p, brand, { x: M - 4, centerY: H - 52, markHeight: 72, wordHeight: 28, lines: contactLines(settings) });
 
     p.right(doc.number ? 'ΠΡΟΣΦΟΡΑ ΑΡ.' : 'ΠΡΟΣΦΟΡΑ', W - M, H - 39, { font: fonts.bold, size: 8.5, tone: 'amber' });
     if (doc.number) p.right(doc.number, W - M, H - 62, { font: fonts.display, size: 21, tone: 'white' });
@@ -60,8 +56,8 @@ export async function quotePdf(doc, settings) {
     const band = 54;
     p.box(0, H, W, band, { fill: 'walnut' });
     p.box(0, H - band, W, 3, { fill: 'amber' });
-    p.text(businessName, M, H - 33, { font: fonts.bold, size: 12, tone: 'white' });
-    p.right(`${title} · συνέχεια`, W - M, H - 33, { size: 9, tone: 'tan' });
+    drawSmallBandLogo(page, brand, { x: M - 2, centerY: H - 27 });
+    p.right(`${title} · συνέχεια`, W - M, H - 30, { size: 9, tone: 'tan' });
     return H - band - 26;
   }
 

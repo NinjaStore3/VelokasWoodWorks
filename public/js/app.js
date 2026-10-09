@@ -78,7 +78,6 @@ function showTab(name) {
 
 function applyBranding(next) {
   branding = next;
-  for (const el of document.querySelectorAll('[data-bind="businessName"]')) el.textContent = next.businessName;
   updateHeader();
 }
 

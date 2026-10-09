@@ -3,7 +3,7 @@
 // up straight away) and the cached copy is used only when the network fails
 // or is too slow. The API is never cached here: the app keeps its own copy of
 // the prices, and admin data stays online-only.
-const CACHE = 'velokas-v2';
+const CACHE = 'velokas-v3';
 const NETWORK_TIMEOUT_MS = 4000;
 
 // Needed to open the app offline. Must all exist, or installing fails.
@@ -12,9 +12,11 @@ const SHELL = [
   '/manifest.webmanifest',
   '/css/app.css',
   '/icons.svg',
-  '/img/logo.svg',
+  '/img/logo-mark.webp',
+  '/img/logo-wordmark.webp',
+  '/img/logo.webp',
+  '/img/favicon.png',
   '/img/grain.svg',
-  '/img/icon-192.png',
   '/fonts/manrope-greek-wght-normal.woff2',
   '/fonts/manrope-latin-wght-normal.woff2',
   '/fonts/manrope-latin-ext-wght-normal.woff2',
@@ -42,6 +44,8 @@ const PDF_FILES = [
   '/js/pdf-quote.js',
   '/js/pdf-cuts.js',
   '/vendor/pdf.js',
+  '/img/pdf-mark.jpg',
+  '/img/pdf-wordmark.jpg',
   '/fonts/pdf/Manrope-Regular.ttf',
   '/fonts/pdf/Manrope-Bold.ttf',
   '/fonts/pdf/Fraunces-SemiBold.ttf',
