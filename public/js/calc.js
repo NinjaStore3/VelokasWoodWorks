@@ -74,6 +74,7 @@ export function formatDate(date) {
 export const SECTIONS = {
   kitchen: {
     label: 'Κουζίνα',
+    short: 'Κουζίνα',
     of: 'κουζίνας',
     icon: 'chef-hat',
     pick: 'Υλικό',
@@ -82,6 +83,7 @@ export const SECTIONS = {
   },
   wardrobe: {
     label: 'Ντουλάπα',
+    short: 'Ντουλάπα',
     of: 'ντουλάπας',
     icon: 'shirt',
     pick: 'Τύπος ντουλάπας',
@@ -90,11 +92,21 @@ export const SECTIONS = {
   },
   door: {
     label: 'Πόρτα',
+    short: 'Πόρτα',
     of: 'πόρτας',
     icon: 'door-open',
     pick: 'Τύπος πόρτας',
     materialsTitle: 'Τύποι πόρτας',
     extrasTitle: 'Extras πόρτας',
+  },
+  bathroom: {
+    label: 'Έπιπλο μπάνιου',
+    short: 'Μπάνιο',
+    of: 'επίπλου μπάνιου',
+    icon: 'bath',
+    pick: 'Υλικό',
+    materialsTitle: 'Υλικά μπάνιου',
+    extrasTitle: 'Extras μπάνιου',
   },
 };
 export const SECTION_KEYS = Object.keys(SECTIONS);

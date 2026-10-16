@@ -26,6 +26,8 @@ export const PICKER_ICONS = [
   ['lightbulb', 'Φωτισμός'],
   ['grip-horizontal', 'Πόμολο'],
   ['shirt', 'Ντουλάπα'],
+  ['bath', 'Μπάνιο'],
+  ['shopping-basket', 'Καλάθι'],
   ['lamp-ceiling', 'Φωτιστικό'],
   ['plug-zap', 'Ρεύμα'],
   ['boxes', 'Κομμάτια'],

@@ -1,5 +1,6 @@
 // Validation for the admin "save settings" payload. Pure functions, so they
 // can be unit-tested in Node without the Workers runtime.
+import { SECTION_KEYS } from '../public/js/calc.js';
 
 export const LIMITS = {
   material: 50,
@@ -25,7 +26,7 @@ const ICON_RE = /^[a-z0-9-]{1,40}$/;
 // How an item is priced: per metre, per square metre or per piece.
 export const UNITS = ['m', 'm2', 'pcs'];
 // The kinds of job a quote covers; materials and extras belong to one.
-export const SECTIONS = ['kitchen', 'wardrobe', 'door'];
+export const SECTIONS = SECTION_KEYS;
 
 const LIST_LABELS = {
   materials: 'Υλικά',

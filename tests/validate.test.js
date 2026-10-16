@@ -163,12 +163,17 @@ test('only known quote statuses are accepted', () => {
 test('materials and extras have a unit and a kind of job', () => {
   const body = valid();
   body.materials.push({ name: 'Ανοιγόμενη', price: 400, unit: 'pcs', section: 'door', active: true });
+  body.materials.push({ name: 'Κόντρα πλακέ', price: 0, section: 'bathroom', active: true }); // no price yet
   body.extras[0].unit = 'm';
   body.extras[0].section = 'wardrobe';
   body.costs[0].unit = 'm'; // cost lines are plain amounts
   body.costs[0].section = 'door';
   const config = validateConfig(body);
-  assert.deepEqual(config.materials.map((m) => [m.unit, m.section]), [['m', 'kitchen'], ['pcs', 'door']]);
+  assert.deepEqual(config.materials.map((m) => [m.unit, m.section, m.priceCents]), [
+    ['m', 'kitchen', 32000],
+    ['pcs', 'door', 40000],
+    ['m', 'bathroom', 0],
+  ]);
   assert.deepEqual([config.extras[0].unit, config.extras[0].section], ['m', 'wardrobe']);
   assert.deepEqual([config.extras[1].unit, config.extras[1].section], ['pcs', 'kitchen']);
   assert.deepEqual([config.costs[0].unit, config.costs[0].section], ['pcs', 'kitchen']);

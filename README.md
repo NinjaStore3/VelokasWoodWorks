@@ -2,7 +2,7 @@
 
 # Velokas Woodworks
 
-A phone-first app for Velokas Woodworks, grown from Panos's kitchen-costing mockup: price a kitchen, a wardrobe or doors (or all of them in one quote), send the customer a PDF quote, keep track of every quote, and work out how to cut the sheets. It runs entirely on Cloudflare's free tier: a Worker serves the app and a small API, and a D1 (SQLite) database stores the prices and the saved quotes.
+A phone-first app for Velokas Woodworks, grown from Panos's kitchen-costing mockup: price a kitchen, a wardrobe, doors or bathroom furniture (or several in one quote), send the customer a PDF quote, keep track of every quote, and work out how to cut the sheets. It runs entirely on Cloudflare's free tier: a Worker serves the app and a small API, and a D1 (SQLite) database stores the prices and the saved quotes.
 
 <p>
   <img src="docs/screenshots/calculator.jpg" width="200" alt="Calculator: choosing the kind of quote">
@@ -21,8 +21,8 @@ Four tabs along the bottom of the screen.
 
 **Κοστολόγηση (calculator)**, open to anyone with the link:
 
-1. **Τι προσφορά φτιάχνεις;** Κουζίνα, Ντουλάπα, Πόρτα, or **Συνδυασμός** to put any two or all three in one quote (tick which ones).
-2. **One card per job:** pick the material or type (Μελαμίνη / PET / Thermofoil for a kitchen, Ανοιγόμενη / Συρόμενη for a wardrobe or a door) and type the quantity: metres, square metres or pieces, however that item is priced. The price comes from Settings and can be changed for a single quote. Under it are that job's extras, each with a quantity stepper (decimals for extras priced per metre, such as LED lighting) and a unit price that can also be changed per quote.
+1. **Τι προσφορά φτιάχνεις;** Κουζίνα, Ντουλάπα, Πόρτα, Έπιπλο μπάνιου, or **Συνδυασμός** to put several in one quote (tick which ones).
+2. **One card per job:** pick the material or type (Μελαμίνη / PET / Thermofoil for a kitchen, Ανοιγόμενη / Συρόμενη for a wardrobe or a door, Μελαμίνη / PET / Κόντρα πλακέ for bathroom furniture) and type the quantity: metres, square metres or pieces, however that item is priced. The price comes from Settings and can be changed for a single quote. Under it are that job's extras, each with a quantity stepper (decimals for extras priced per metre, such as LED lighting) and a unit price that can also be changed per quote.
 3. **Άλλο extra:** any one-off amount with its own description.
 4. **Πελάτης & έκπτωση:** customer name, phone and area, a discount in % or €, and notes printed on the quote.
 5. **Παράδοση & πληρωμή:** delivery in days, and how the total is paid: type the deposit or the balance (εξόφληση) and the other fills itself in, so they always add up to the total. Left alone, the deposit is the % set in Settings.
@@ -44,7 +44,7 @@ Whatever is typed is kept on the phone, so a refresh doesn't lose it.
 
 - Business name, subtitle, VAT rate
 - Details printed on the PDF: phone, email, address, ΑΦΜ, how many days a quote is valid, deposit %, terms
-- A price list per job (Κουζίνα / Ντουλάπα / Πόρτα): its materials or types, priced per metre, per square metre or per piece, and its extras, priced per piece or per metre, with an icon. Plus the internal cost lines. Add, rename, reprice, hide, reorder and delete, then **Αποθήκευση**
+- A price list per job (Κουζίνα / Ντουλάπα / Πόρτα / Μπάνιο): its materials or types, priced per metre, per square metre or per piece, and its extras, priced per piece or per metre, with an icon. Plus the internal cost lines. Add, rename, reprice, hide, reorder and delete, then **Αποθήκευση**
 
 **Works offline and installs like an app.** After the first visit the app opens without internet: calculator, PDFs and cut lists work with the last prices loaded. The archive and saving quotes need a connection. On a computer, Chrome or Edge show an **Εγκατάσταση** button in the header. On a phone, use **Add to Home screen**.
 
@@ -69,8 +69,9 @@ The database starts with Panos's price list (all can be changed in **Ρυθμί�
 | Κουζίνα | Μελαμίνη 260 €/μ., PET 330 €/μ., Thermofoil 410 €/μ. | the mockup's extras (Magic Corner, Μπουκαλοθήκη, …), LED φωτισμός 18 €/μ., Πόμολα 5 €/τεμ. |
 | Ντουλάπα | Ανοιγόμενη 320 €/μ., Συρόμενη 390 €/μ. | Συρτάρι κανονικό 35 €, Συρτάρι soft close 45 €, Παντελονοθήκη 60 €, LED φωτισμός 18 €/μ., Πόμολα 30 € |
 | Πόρτα | Ανοιγόμενη 400 €/τεμ., Συρόμενη 600 €/τεμ. | none yet |
+| Έπιπλο μπάνιου | Μελαμίνη, PET (the kitchen's prices), Κόντρα πλακέ (no price yet) | Συρτάρι, Βαγονέτο (the kitchen's prices), Καλάθι απλύτων (no price yet) |
 
-Wardrobes are assumed to be priced per metre of length; switch them to τ.μ. in **Ρυθμίσεις** if that's how Panos counts them.
+Wardrobes and bathroom furniture are assumed to be priced per metre of length; switch them to τ.μ. in **Ρυθμίσεις** if that's how Panos counts them. Items without a price show 0 € until it is set in **Ρυθμίσεις** (or typed for a single quote).
 
 ## Deploy
 
@@ -194,7 +195,7 @@ Prices are stored as integer cents. Saving settings sends the version the editor
 
 ### Changing the database
 
-Add a new numbered file such as `migrations/0005_something.sql`, try it locally with `npm run db:migrate:local`, then push to `main`. The deploy applies it right after the new code goes live; until then the API answers 503 for anything that needs the new tables, so keep each change compatible with the code before it.
+Add a new numbered file such as `migrations/0006_something.sql`, try it locally with `npm run db:migrate:local`, then push to `main`. The deploy applies it right after the new code goes live; until then the API answers 503 for anything that needs the new tables, so keep each change compatible with the code before it.
 
 ## Security
 

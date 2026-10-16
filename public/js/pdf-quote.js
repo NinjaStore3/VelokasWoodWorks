@@ -165,7 +165,7 @@ export async function quotePdf(doc, settings) {
     const boxHeight = 42;
     // Under the total: how it is paid.
     const payments = doc.depositCents > 0 ? [[depositLabel(doc), doc.depositCents], ['Εξόφληση', balanceOf(doc)]] : [];
-    const height = 10 + rows.length * 17 + 16 + boxHeight + (payments.length ? 6 + payments.length * 17 : 0);
+    const height = 10 + rows.length * 17 + 16 + boxHeight + (payments.length ? 4 + payments.length * 15 : 0);
     const noteLines = doc.notes ? wrap(doc.notes, fonts.regular, 9.5, CONTENT - width - 28) : [];
     const notesBeside = noteLines.length > 0 && 15 + noteLines.length * 13 <= height;
     ensure(height + 4);
@@ -193,13 +193,13 @@ export async function quotePdf(doc, settings) {
       tone: 'amber',
     });
     y -= boxHeight;
-    if (payments.length) y -= 6;
+    if (payments.length) y -= 4;
     for (const [label, cents] of payments) {
-      y -= 17;
+      y -= 15;
       p.text(label, x + 4, y, { size: 10, tone: 'muted' });
       p.right(formatMoney(cents), M + CONTENT - 12, y, { font: fonts.bold, size: 10.5 });
     }
-    y -= 22;
+    y -= 18;
     return notesBeside;
   }
 
@@ -218,7 +218,7 @@ export async function quotePdf(doc, settings) {
     y -= 10;
   }
 
-  const SIGNATURES = 40; // room to sign above the lines, plus their captions
+  const SIGNATURES = 36; // room to sign above the lines, plus their captions
   function signatures() {
     ensure(SIGNATURES);
     // With space to spare they sit low on the page, like on a printed form.
