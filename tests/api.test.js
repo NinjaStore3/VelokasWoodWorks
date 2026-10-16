@@ -102,6 +102,10 @@ test('public config serves the seeded prices and Panos\'s price list', async () 
       ['wardrobe', 'Συρόμενη', 390, 'm'],
       ['door', 'Ανοιγόμενη', 400, 'pcs'],
       ['door', 'Συρόμενη', 600, 'pcs'],
+      // Bathroom: the kitchen's melamine and PET prices; plywood has none yet
+      ['bathroom', 'Μελαμίνη', 260, 'm'],
+      ['bathroom', 'PET', 330, 'm'],
+      ['bathroom', 'Κόντρα πλακέ', 0, 'm'],
     ],
   );
   const extras = (section) => config.extras.filter((e) => e.section === section).map((e) => [e.name, e.price, e.unit]);
@@ -113,6 +117,11 @@ test('public config serves the seeded prices and Panos\'s price list', async () 
     ['Παντελονοθήκη', 60, 'pcs'],
     ['LED φωτισμός', 18, 'm'],
     ['Πόμολα', 30, 'pcs'],
+  ]);
+  assert.deepEqual(extras('bathroom'), [
+    ['Συρτάρι', 40, 'pcs'],
+    ['Βαγονέτο', 100, 'pcs'],
+    ['Καλάθι απλύτων', 0, 'pcs'],
   ]);
   assert.equal(config.costs.length, 6);
   assert.equal('section' in config.costs[0], false, 'cost lines belong to no job');
@@ -172,7 +181,7 @@ test('saving settings updates what the calculator sees', async () => {
   assert.equal(saved.status, 200);
   const savedConfig = await saved.json();
   assert.equal(savedConfig.version, current.version + 1);
-  assert.equal(savedConfig.extras.length, 15, 'admins still see hidden items');
+  assert.equal(savedConfig.extras.length, 18, 'admins still see hidden items');
 
   const publicConfig = await (await call('GET', '/api/config')).json();
   assert.deepEqual(publicConfig.materials.slice(0, 3).map((m) => m.name), ['Μελαμίνη', 'Λάκα', 'PET']);
@@ -180,12 +189,13 @@ test('saving settings updates what the calculator sees', async () => {
   assert.equal(publicConfig.materials[1].unit, 'm2');
   assert.deepEqual(
     publicConfig.materials.map((m) => m.section),
-    ['kitchen', 'kitchen', 'kitchen', 'kitchen', 'wardrobe', 'wardrobe', 'door', 'door'],
+    ['kitchen', 'kitchen', 'kitchen', 'kitchen', 'wardrobe', 'wardrobe', 'door', 'door', 'bathroom', 'bathroom', 'bathroom'],
     'saving keeps every item in its job',
   );
   assert.equal(publicConfig.extras.find((e) => e.name === 'Παντελονοθήκη').section, 'wardrobe');
+  assert.equal(publicConfig.extras.find((e) => e.name === 'Καλάθι απλύτων').section, 'bathroom');
   assert.equal(publicConfig.extras[0].price, 205);
-  assert.equal(publicConfig.extras.length, 14, 'hidden extras are not public');
+  assert.equal(publicConfig.extras.length, 17, 'hidden extras are not public');
   assert.equal(publicConfig.settings.vatRate, 13);
   assert.equal(publicConfig.extras[0].id, current.extras[0].id, 'existing items keep their ids');
 

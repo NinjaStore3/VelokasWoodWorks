@@ -31,8 +31,8 @@ import { session } from './session.js';
 const DRAFT_KEY = 'vw:draft:v1';
 const COST_TINT_OFFSET = 4;
 // Each job's card colour (.card[data-accent] in app.css) and chart colour.
-const JOB_ACCENT = { kitchen: 'amber', wardrobe: 'sky', door: 'teal' };
-const JOB_TINT = { kitchen: 'var(--amber)', wardrobe: 'var(--sky)', door: 'var(--teal)' };
+const JOB_ACCENT = { kitchen: 'amber', wardrobe: 'sky', door: 'teal', bathroom: 'green' };
+const JOB_TINT = { kitchen: 'var(--amber)', wardrobe: 'var(--sky)', door: 'var(--teal)', bathroom: 'var(--green)' };
 
 function setBusy(button, busy, label) {
   button.disabled = busy;
@@ -175,7 +175,7 @@ export function createCalculator({ onQuoteSaved } = {}) {
     update();
   }
 
-  // Step 1: kitchen, wardrobe or door, or «Συνδυασμός» to pick several.
+  // Step 1: one kind of job, or «Συνδυασμός» to pick several.
   function renderPicker() {
     const mode = draft.combo ? 'combo' : draft.sections[0];
     const tile = (value, label, iconName) =>
@@ -189,7 +189,7 @@ export function createCalculator({ onQuoteSaved } = {}) {
 
     comboEl.hidden = !draft.combo;
     comboEl.replaceChildren(
-      h('p', { class: 'job-combo-label' }, 'Τι περιλαμβάνει η προσφορά:'),
+      h('p', { class: 'job-combo-label' }, 'Διάλεξε τι περιλαμβάνει η προσφορά:'),
       h(
         'div',
         { class: 'chips', role: 'group', 'aria-label': 'Τι περιλαμβάνει η προσφορά' },
@@ -209,8 +209,7 @@ export function createCalculator({ onQuoteSaved } = {}) {
   function pickMode(value) {
     if (value === 'combo') {
       if (draft.combo) return;
-      draft.combo = true;
-      draft.sections = [...SECTION_KEYS]; // all three; untick what isn't needed
+      draft.combo = true; // keeps the job already chosen; tick the others
     } else {
       if (!draft.combo && draft.sections[0] === value) return;
       draft.combo = false;
@@ -224,7 +223,7 @@ export function createCalculator({ onQuoteSaved } = {}) {
   function toggleJob(key) {
     const on = draft.sections.includes(key);
     if (on && draft.sections.length === 1) {
-      toast('Η προσφορά χρειάζεται τουλάχιστον ένα από τα τρία.');
+      toast('Η προσφορά χρειάζεται τουλάχιστον μία εργασία.');
       return;
     }
     draft.sections = SECTION_KEYS.filter((k) => (k === key ? !on : draft.sections.includes(k)));

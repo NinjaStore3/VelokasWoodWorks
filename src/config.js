@@ -1,3 +1,4 @@
+import { SECTION_KEYS } from '../public/js/calc.js';
 import { HttpError } from './http.js';
 
 const DEFAULT_SETTINGS = {
@@ -31,7 +32,7 @@ const NUMERIC_SETTINGS = new Set(['vatRate', 'validityDays', 'depositPercent']);
 
 const LIST_BY_KIND = { material: 'materials', extra: 'extras', cost: 'costs' };
 const UNITS = new Set(['m', 'm2', 'pcs']);
-const SECTIONS = new Set(['kitchen', 'wardrobe', 'door']);
+const SECTIONS = new Set(SECTION_KEYS);
 
 // Reads everything the calculator needs. Admins also get inactive items.
 export async function readConfig(db, { includeInactive = false } = {}) {

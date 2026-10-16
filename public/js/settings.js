@@ -248,7 +248,7 @@ export function createSettings({ onSaved }) {
           'button',
           { type: 'button', 'aria-pressed': String(section === key), onclick: () => showSection(key) },
           icon(SECTIONS[key].icon),
-          SECTIONS[key].label,
+          SECTIONS[key].short,
         ),
       ),
     );

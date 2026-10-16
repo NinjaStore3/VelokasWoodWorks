@@ -236,6 +236,32 @@ const shop = {
   ],
 };
 
+test('a kitchen and a bathroom vanity can go in one quote', () => {
+  const shop = {
+    ...config,
+    materials: [...config.materials, { id: 40, name: 'Κόντρα πλακέ', price: 280, unit: 'm', section: 'bathroom', icon: '' }],
+    extras: [...config.extras, { id: 41, name: 'Καλάθι απλύτων', price: 35, unit: 'pcs', section: 'bathroom', icon: 'shopping-basket' }],
+  };
+  const input = draft({
+    sections: ['bathroom', 'kitchen'],
+    combo: true,
+    jobs: { kitchen: { qty: '3' }, bathroom: { qty: '1,2' } },
+    extras: { 41: { qty: '1' } },
+  });
+  const quote = computeQuote(shop, input);
+  assert.deepEqual(quote.sections.map((s) => [s.key, s.label, s.material.name, s.totalCents]), [
+    ['kitchen', 'Κουζίνα', 'Μελαμίνη', 96000],
+    ['bathroom', 'Έπιπλο μπάνιου', 'Κόντρα πλακέ', 33600 + 3500], // 1,2 m × 280 € + basket
+  ]);
+  const doc = buildQuoteDoc(quote, input);
+  assert.equal(doc.subject, 'Προσφορά κουζίνας και επίπλου μπάνιου');
+  assert.deepEqual(doc.lines.map((line) => [line.name, line.detail]), [
+    ['Κουζίνα', 'Μελαμίνη'],
+    ['Έπιπλο μπάνιου', 'Κόντρα πλακέ'],
+    ['Καλάθι απλύτων', 'Έπιπλο μπάνιου'],
+  ]);
+});
+
 test('a quote can cover a kitchen, a wardrobe and doors together', () => {
   const input = draft({
     sections: ['door', 'kitchen', 'wardrobe'], // any order: shown kitchen, wardrobe, door
@@ -302,6 +328,7 @@ test('drafts and saved quotes from before job types open as a kitchen', () => {
 test('the subject names the jobs in a quote', () => {
   assert.equal(jobSubject(['kitchen']), 'Προσφορά κουζίνας');
   assert.equal(jobSubject(['door', 'wardrobe']), 'Προσφορά ντουλάπας και πόρτας');
+  assert.equal(jobSubject(['bathroom', 'door', 'kitchen', 'wardrobe']), 'Προσφορά κουζίνας, ντουλάπας, πόρτας και επίπλου μπάνιου');
   assert.equal(jobSubject([]), 'Προσφορά');
 });
 
