@@ -25,11 +25,12 @@ Four tabs along the bottom of the screen.
 2. **One card per job:** pick the material or type (Μελαμίνη / PET / Thermofoil for a kitchen, Ανοιγόμενη / Συρόμενη for a wardrobe or a door) and type the quantity: metres, square metres or pieces, however that item is priced. The price comes from Settings and can be changed for a single quote. Under it are that job's extras, each with a quantity stepper (decimals for extras priced per metre, such as LED lighting) and a unit price that can also be changed per quote.
 3. **Άλλο extra:** any one-off amount with its own description.
 4. **Πελάτης & έκπτωση:** customer name, phone and area, a discount in % or €, and notes printed on the quote.
-5. **Εσωτερική κοστολόγηση (optional):** Panos's own costs (parts, doors, hardware, countertop, labour, transport) show the profit and margin. They never appear in anything the customer sees.
+5. **Παράδοση & πληρωμή:** delivery in days, and how the total is paid: type the deposit or the balance (εξόφληση) and the other fills itself in, so they always add up to the total. Left alone, the deposit is the % set in Settings.
+6. **Εσωτερική κοστολόγηση (optional):** Panos's own costs (parts, doors, hardware, countertop, labour, transport) show the profit and margin. They never appear in anything the customer sees.
 
 The total updates live in the bar at the bottom. **Προσφορά** opens the breakdown, with three actions:
 
-- **PDF:** an A4 quote with the logo and business details, the customer, every line (each job followed by its extras), discount, VAT, deposit, how long the offer is valid, the terms and signature lines. On a phone it goes straight to Viber, email and so on through the share sheet; it can also be downloaded or printed.
+- **PDF:** an A4 quote with the logo and business details, the customer, every line (each job followed by its extras), discount, VAT, deposit and balance, delivery time, how long the offer is valid, the terms and signature lines. On a phone it goes straight to Viber, email and so on through the share sheet; it can also be downloaded or printed.
 - **Αποθήκευση:** saves it to the archive as `2026-001`, `2026-002`… (numbered per year). Making a PDF while logged in saves it too, so the PDF carries the number.
 - **Κείμενο:** the same quote as plain text for a quick message.
 
@@ -56,7 +57,8 @@ subtotal = Σ jobs in the quote  +  other extra
 net      = subtotal − discount        (discount: % of the subtotal, or an amount)
 VAT      = net × VAT rate             (rounded to the cent)
 total    = net + VAT
-deposit  = total × deposit %
+deposit  = total × deposit %         (or the amount typed for this quote)
+balance  = total − deposit
 profit   = net − internal costs       (margin = profit ÷ net)
 ```
 

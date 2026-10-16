@@ -305,6 +305,19 @@ test('quotes are numbered per year and their totals recomputed', async () => {
   assert.deepEqual(quotes[2].customer, quoteBody().customer);
 });
 
+test('a deposit set by hand is kept, capped at the total', async () => {
+  const { cookie } = await login();
+  const body = quoteBody();
+  Object.assign(body.doc, { fixedDepositCents: 50000, deliveryDays: 25 });
+  const saved = await (await call('POST', '/api/admin/quotes', { cookie, body })).json();
+  assert.equal(saved.doc.grossCents, 182131);
+  assert.deepEqual([saved.doc.depositCents, saved.doc.balanceCents, saved.doc.deliveryDays], [50000, 132131, 25]);
+
+  body.doc.fixedDepositCents = 999_999;
+  const capped = await (await call('POST', '/api/admin/quotes', { cookie, body })).json();
+  assert.deepEqual([capped.doc.depositCents, capped.doc.balanceCents], [182131, 0]);
+});
+
 test('a quote can be edited, moved along and deleted', async () => {
   const { cookie } = await login();
   const created = await (await call('POST', '/api/admin/quotes', { cookie, body: quoteBody({ status: 'sent' }) })).json();

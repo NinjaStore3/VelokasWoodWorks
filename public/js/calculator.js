@@ -5,6 +5,8 @@ import {
   buildQuoteDoc,
   buildShareText,
   computeQuote,
+  deliveryLabel,
+  depositLabel,
   emptyDraft,
   extraUnit,
   formatDate,
@@ -16,6 +18,7 @@ import {
   materialUnit,
   normaliseDraft,
   parseAmount,
+  parseDays,
   parseQty,
   sectionOf,
   toCents,
@@ -102,6 +105,13 @@ export function createCalculator({ onQuoteSaved } = {}) {
   const modeButtons = [...document.querySelectorAll('.segmented [data-mode]')];
   const customerInputs = { name: $('#customerName'), phone: $('#customerPhone'), address: $('#customerAddress') };
   const notesInput = $('#quoteNotes');
+  const deliveryInput = $('#deliveryDays');
+  const payInputs = [
+    ['deposit', $('#depositAmount')],
+    ['balance', $('#balanceAmount')],
+  ];
+  const paymentHint = $('#paymentHint');
+  const paymentReset = $('#paymentReset');
   const pdfBtn = $('#pdfBtn');
   const saveQuoteBtn = $('#saveQuoteBtn');
   const textBtn = $('#textBtn');
@@ -154,6 +164,9 @@ export function createCalculator({ onQuoteSaved } = {}) {
     syncDiscountMode();
     for (const [field, input] of Object.entries(customerInputs)) input.value = draft.customer[field] ?? '';
     notesInput.value = draft.notes ?? '';
+    deliveryInput.value = draft.deliveryDays ?? '';
+    // The amount typed stays as typed; update() fills in the other one.
+    for (const [part, input] of payInputs) if (part === draft.payment.by) input.value = draft.payment.amount;
     renderNotice();
     saveQuoteBtn.querySelector('span').textContent = draft.quoteRef ? 'Ενημέρωση' : 'Αποθήκευση';
 
@@ -447,6 +460,8 @@ export function createCalculator({ onQuoteSaved } = {}) {
     discountSum.hidden = quote.discountCents === 0;
     discountSum.textContent = `−${formatMoney(quote.discountCents)}`;
 
+    updatePayment();
+
     for (const [id, input] of costRefs) setInvalid(input, parseAmount(draft.costs[id] ?? '') === null);
     profitStrip.replaceChildren(...profitStats(quote));
 
@@ -460,6 +475,41 @@ export function createCalculator({ onQuoteSaved } = {}) {
 
     if (sheet.open) renderResult();
     scheduleSave();
+  }
+
+  // Step 4: the deposit and the balance always add up to the total. The one
+  // Panos typed stays put; the other is worked out, except while he's in it.
+  function updatePayment() {
+    const q = quote;
+    const by = draft.payment.by;
+    const over = q.paymentOver && q.grossCents > 0;
+    for (const [part, input] of payInputs) {
+      if (part === by) {
+        setInvalid(input, q.paymentInvalid || over);
+        continue;
+      }
+      setInvalid(input, false);
+      if (document.activeElement === input) continue;
+      const cents = part === 'deposit' ? q.depositCents : q.balanceCents;
+      input.value = q.grossCents > 0 ? formatInput(cents / 100) : '';
+    }
+    setInvalid(deliveryInput, parseDays(draft.deliveryDays) === null);
+
+    const total = `${q.vatRate > 0 ? 'το σύνολο με ΦΠΑ' : 'το σύνολο'} (${formatMoney(q.grossCents)})`;
+    const share = (cents) => formatPercent(cents / q.grossCents);
+    let hint;
+    if (q.paymentInvalid) hint = 'Γράψε το ποσό σε ευρώ, π.χ. 1500 ή 1.500,50.';
+    else if (over) hint = `Το ποσό είναι πάνω από ${total}.`;
+    else if (q.grossCents === 0) hint = 'Βγαίνουν από το σύνολο, μόλις συμπληρωθεί η προσφορά.';
+    else if (by) hint = `${share(q.depositCents)} προκαταβολή και ${share(q.balanceCents)} εξόφληση, από ${total}.`;
+    else if (q.depositPercent > 0) {
+      hint = `Προκαταβολή ${formatNumber(q.depositPercent)}% από τις Ρυθμίσεις. Γράψε άλλο ποσό σε όποιο θέλεις και το άλλο συμπληρώνεται μόνο του.`;
+    } else hint = `Γράψε προκαταβολή ή εξόφληση και το άλλο συμπληρώνεται μόνο του, ώστε να βγαίνει ${total}.`;
+    paymentHint.textContent = hint;
+    paymentHint.classList.toggle('is-error', q.paymentInvalid || over);
+    paymentReset.hidden = !by;
+    $('span', paymentReset).textContent =
+      q.depositPercent > 0 ? `Επαναφορά στο ${formatNumber(q.depositPercent)}% των Ρυθμίσεων` : 'Χωρίς προκαταβολή';
   }
 
   function syncDiscountMode() {
@@ -587,7 +637,9 @@ export function createCalculator({ onQuoteSaved } = {}) {
           totalRow('Σύνολο χωρίς ΦΠΑ', q.netCents, !vat),
           vat && totalRow(`ΦΠΑ ${formatNumber(q.vatRate)}%`, q.vatCents),
           vat && totalRow('Σύνολο με ΦΠΑ', q.grossCents, true),
-          q.depositCents > 0 && totalRow(`Προκαταβολή ${formatNumber(q.depositPercent)}%`, q.depositCents),
+          q.depositCents > 0 && totalRow(depositLabel(q), q.depositCents),
+          q.depositCents > 0 && totalRow('Εξόφληση', q.balanceCents),
+          q.deliveryDays > 0 && h('div', {}, h('span', {}, 'Παράδοση'), h('span', {}, deliveryLabel(q.deliveryDays))),
         ),
       );
 
@@ -672,6 +724,21 @@ export function createCalculator({ onQuoteSaved } = {}) {
   notesInput.addEventListener('input', () => {
     draft.notes = notesInput.value;
     scheduleSave();
+  });
+  deliveryInput.addEventListener('input', () => {
+    draft.deliveryDays = deliveryInput.value;
+    update();
+  });
+  for (const [part, input] of payInputs) {
+    input.addEventListener('input', () => {
+      draft.payment = input.value.trim() === '' ? { by: null, amount: '' } : { by: part, amount: input.value };
+      update();
+    });
+    input.addEventListener('blur', update); // fills it in again if it was left empty
+  }
+  paymentReset.addEventListener('click', () => {
+    draft.payment = { by: null, amount: '' };
+    update();
   });
 
   $('#openResult').addEventListener('click', () => {

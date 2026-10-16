@@ -181,3 +181,22 @@ test('materials and extras have a unit and a kind of job', () => {
     'Extras #1 (Magic Corner): μη έγκυρο είδος εργασίας.',
   ]);
 });
+
+test('a quote can carry delivery days and a deposit set by hand', () => {
+  const plain = validateQuote(quote());
+  assert.deepEqual([plain.doc.deliveryDays, plain.doc.fixedDepositCents], [0, null]);
+
+  const body = quote();
+  Object.assign(body.doc, { deliveryDays: 30, fixedDepositCents: 50000 });
+  const result = validateQuote(body);
+  assert.deepEqual([result.doc.deliveryDays, result.doc.fixedDepositCents], [30, 50000]);
+
+  for (const [deliveryDays, fixedDepositCents] of [[2.5, -1], [-1, 12.5], [1000, '500']]) {
+    const bad = quote();
+    Object.assign(bad.doc, { deliveryDays, fixedDepositCents });
+    assert.throws(
+      () => validateQuote(bad),
+      (error) => error.errors.includes('Μη έγκυρος χρόνος παράδοσης.') && error.errors.includes('Μη έγκυρο ποσό προκαταβολής.'),
+    );
+  }
+});

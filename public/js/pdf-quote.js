@@ -1,6 +1,6 @@
 // A4 PDF of a quote (the "doc" from buildQuoteDoc / the archive). Never
 // includes internal costs: the doc doesn't carry them.
-import { addDays, formatDate, formatMoney, formatNumber } from './calc.js';
+import { addDays, balanceOf, deliveryLabel, depositLabel, formatDate, formatMoney, formatNumber } from './calc.js';
 import { PAGE, createDoc, drawBandLogo, drawSmallBandLogo, painter, wrap } from './pdf-common.js';
 
 const { width: W, height: H, margin: M } = PAGE;
@@ -87,6 +87,7 @@ export async function quotePdf(doc, settings) {
 
     const right = [['Ημερομηνία', formatDate(date)]];
     if (doc.validityDays > 0) right.push(['Ισχύει έως', formatDate(addDays(date, doc.validityDays))]);
+    if (doc.deliveryDays > 0) right.push(['Παράδοση', deliveryLabel(doc.deliveryDays)]);
 
     const rows = Math.max(left.length || 1, right.length);
     const height = 30 + rows * 15;
@@ -162,7 +163,9 @@ export async function quotePdf(doc, settings) {
     }
     const width = 260;
     const boxHeight = 42;
-    const height = 10 + rows.length * 17 + 16 + boxHeight + (doc.depositCents > 0 ? 17 : 0);
+    // Under the total: how it is paid.
+    const payments = doc.depositCents > 0 ? [[depositLabel(doc), doc.depositCents], ['Εξόφληση', balanceOf(doc)]] : [];
+    const height = 10 + rows.length * 17 + 16 + boxHeight + (payments.length ? 6 + payments.length * 17 : 0);
     const noteLines = doc.notes ? wrap(doc.notes, fonts.regular, 9.5, CONTENT - width - 28) : [];
     const notesBeside = noteLines.length > 0 && 15 + noteLines.length * 13 <= height;
     ensure(height + 4);
@@ -190,12 +193,11 @@ export async function quotePdf(doc, settings) {
       tone: 'amber',
     });
     y -= boxHeight;
-    if (doc.depositCents > 0) {
+    if (payments.length) y -= 6;
+    for (const [label, cents] of payments) {
       y -= 17;
-      p.right(`Προκαταβολή ${formatNumber(doc.depositPercent)}%: ${formatMoney(doc.depositCents)}`, M + CONTENT - 12, y, {
-        size: 9.5,
-        tone: 'muted',
-      });
+      p.text(label, x + 4, y, { size: 10, tone: 'muted' });
+      p.right(formatMoney(cents), M + CONTENT - 12, y, { font: fonts.bold, size: 10.5 });
     }
     y -= 22;
     return notesBeside;

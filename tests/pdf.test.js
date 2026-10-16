@@ -30,8 +30,9 @@ const config = {
   costs: [],
 };
 
-function docFor(draftOverrides) {
+function docFor({ meters = '', ...draftOverrides }) {
   const draft = { ...emptyDraft(), ...draftOverrides };
+  draft.jobs = { ...draft.jobs, kitchen: { materialId: null, qty: meters, price: null } };
   return buildQuoteDoc(computeQuote(config, draft), draft, { validityDays: 30, date: new Date('2026-10-06T10:00:00Z') });
 }
 
@@ -52,6 +53,20 @@ test('a quote PDF is built with Greek text, discount and deposit', async () => {
   const pdf = await PDFDocument.load(bytes);
   assert.equal(pdf.getPageCount(), 1, 'a typical quote fits on one page');
   assert.equal(pdf.getTitle(), 'Προσφορά 2026-007 · Velokas Woodworks');
+});
+
+test('delivery days and the deposit and balance fit on the same page', async () => {
+  const doc = docFor({
+    meters: '4,6',
+    extras: { 2: { qty: '1', price: null } },
+    customer: { name: 'Μαρία Παπαδάκη', phone: '6900000000', address: 'Χαλάνδρι' },
+    notes: 'Χρώμα λευκό ματ.',
+    deliveryDays: '35',
+    payment: { by: 'deposit', amount: '1.000' },
+  });
+  assert.deepEqual([doc.deliveryDays, doc.depositCents, doc.balanceCents], [35, 100000, doc.grossCents - 100000]);
+  const pdf = await PDFDocument.load(await quotePdf(doc, config.settings));
+  assert.equal(pdf.getPageCount(), 1);
 });
 
 test('long quotes flow onto more pages', async () => {

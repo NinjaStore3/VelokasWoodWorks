@@ -1,15 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  balanceOf,
   buildQuoteDoc,
   buildShareText,
   computeQuote,
+  depositLabel,
   emptyDraft,
   jobSubject,
   normaliseDraft,
   formatMoney,
   formatPercent,
   parseAmount,
+  parseDays,
   parseQty,
 } from '../public/js/calc.js';
 
@@ -172,7 +175,7 @@ test('the quote document carries what the customer sees, and no internal costs',
   assert.match(text, /• Μπουκαλοθήκη: 2 × 80 € = 160 €/);
   assert.match(text, /• Φωτισμός LED: 150 €/);
   assert.match(text, /Υποσύνολο: 1\.782 €\nΈκπτωση 10%: -178,20 €\nΣύνολο χωρίς ΦΠΑ: 1\.603,80 €/);
-  assert.match(text, /ΦΠΑ 24%: 384,91 €\nΣύνολο με ΦΠΑ: 1\.988,71 €\nΠροκαταβολή 40%: 795,48 €/);
+  assert.match(text, /ΦΠΑ 24%: 384,91 €\nΣύνολο με ΦΠΑ: 1\.988,71 €\nΠροκαταβολή 40%: 795,48 €\nΕξόφληση: 1\.193,23 €/);
   assert.match(text, /Ισχύει έως 5 Νοεμβρίου 2026\./);
   assert.match(text, /Λευκό ματ\.$/);
   assert.doesNotMatch(text, /999|Πορτάκια|Κέρδος/);
@@ -300,4 +303,64 @@ test('the subject names the jobs in a quote', () => {
   assert.equal(jobSubject(['kitchen']), 'Προσφορά κουζίνας');
   assert.equal(jobSubject(['door', 'wardrobe']), 'Προσφορά ντουλάπας και πόρτας');
   assert.equal(jobSubject([]), 'Προσφορά');
+});
+
+test('the deposit and the balance always add up to the total', () => {
+  const shop = { ...config, settings: { ...config.settings, depositPercent: 40 } };
+  const pay = (payment) => computeQuote(shop, kitchen({ qty: '4,6' }, { payment }));
+  const split = (q) => [q.grossCents, q.depositCents, q.balanceCents, q.fixedDepositCents];
+
+  // 4,6 m × 320 € = 1.472 €, 1.825,28 € with VAT; 40% from Settings
+  assert.deepEqual(split(pay({ by: null, amount: '' })), [182528, 73011, 109517, null]);
+  // The deposit typed for this quote
+  assert.deepEqual(split(pay({ by: 'deposit', amount: '700' })), [182528, 70000, 112528, 70000]);
+  // The balance typed: the deposit is what's left
+  assert.deepEqual(split(pay({ by: 'balance', amount: '1.000,50' })), [182528, 82478, 100050, 82478]);
+  // No more than the total
+  const over = pay({ by: 'deposit', amount: '5000' });
+  assert.deepEqual(split(over), [182528, 182528, 0, 182528]);
+  assert.equal(over.paymentOver, true);
+  assert.deepEqual(split(pay({ by: 'balance', amount: '5000' })), [182528, 0, 182528, 0]);
+  // Not a number, or left blank: the Settings % again
+  const typo = pay({ by: 'deposit', amount: '7οο' });
+  assert.deepEqual([typo.paymentInvalid, typo.depositCents, typo.fixedDepositCents], [true, 73011, null]);
+  assert.deepEqual(split(pay({ by: 'deposit', amount: '  ' })), [182528, 73011, 109517, null]);
+});
+
+test('delivery days and a set deposit reach the quote and its text', () => {
+  const shop = { ...config, settings: { ...config.settings, depositPercent: 40 } };
+  const input = kitchen({ qty: '4,6' }, { payment: { by: 'balance', amount: '1000' }, deliveryDays: '30' });
+  const doc = buildQuoteDoc(computeQuote(shop, input), input, { date: new Date(2026, 9, 16, 12), validityDays: 30 });
+  assert.deepEqual([doc.deliveryDays, doc.fixedDepositCents, doc.depositCents, doc.balanceCents], [30, 82528, 82528, 100000]);
+  assert.equal(depositLabel(doc), 'Προκαταβολή', 'an amount set by hand has no %');
+
+  const text = buildShareText(doc, { businessName: 'Velokas Woodworks' });
+  assert.match(text, /Σύνολο με ΦΠΑ: 1\.825,28 €\nΠροκαταβολή: 825,28 €\nΕξόφληση: 1\.000 €\n/);
+  assert.match(text, /\n\nΠαράδοση σε 30 ημέρες\.\nΙσχύει έως 15 Νοεμβρίου 2026\./);
+
+  const plain = kitchen({ qty: '2' }, { deliveryDays: 'σύντομα' });
+  const quote = computeQuote(config, plain);
+  assert.equal(quote.deliveryDays, 0);
+  const plainText = buildShareText(buildQuoteDoc(quote, plain), { businessName: 'Velokas Woodworks' });
+  assert.doesNotMatch(plainText, /Παράδοση|Προκαταβολή|Εξόφληση/);
+});
+
+test('delivery days are whole numbers up to 999', () => {
+  assert.equal(parseDays(''), 0);
+  assert.equal(parseDays(' 45 '), 45);
+  assert.equal(parseDays('999'), 999);
+  assert.equal(parseDays('1000'), null);
+  assert.equal(parseDays('2,5'), null);
+  assert.equal(parseDays('-3'), null);
+});
+
+test('drafts and quotes from before keep working without payment fields', () => {
+  const upgraded = normaliseDraft({ discount: '5', payment: { by: 'everything', amount: 3 }, deliveryDays: 21 });
+  assert.deepEqual(upgraded.payment, { by: null, amount: '' });
+  assert.equal(upgraded.deliveryDays, '21');
+  assert.deepEqual(normaliseDraft({}).payment, { by: null, amount: '' });
+
+  const oldDoc = { grossCents: 100000, depositCents: 40000, depositPercent: 40 };
+  assert.equal(balanceOf(oldDoc), 60000);
+  assert.equal(depositLabel(oldDoc), 'Προκαταβολή 40%');
 });

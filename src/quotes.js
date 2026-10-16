@@ -47,6 +47,7 @@ function prepare(body, now) {
       discountCents: quote.doc.discountCents,
       vatRate: quote.doc.vatRate,
       depositPercent: quote.doc.depositPercent,
+      fixedDepositCents: quote.doc.fixedDepositCents,
     }),
   };
   return { ...quote, doc };

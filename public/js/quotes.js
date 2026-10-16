@@ -1,7 +1,7 @@
 // Προσφορές tab: the saved-quote archive. Search, filter by status, follow a
 // quote from draft to closed deal, reopen or copy it, PDF, call, delete.
 import { api } from './api.js';
-import { formatMoney, formatNumber, formatPercent } from './calc.js';
+import { balanceOf, deliveryLabel, depositLabel, formatMoney, formatNumber, formatPercent } from './calc.js';
 import { $, h, toast } from './dom.js';
 import { icon } from './icons.js';
 import { pdfFileName, showPdf } from './pdf-share.js';
@@ -370,7 +370,11 @@ export function createQuotes({ getSettings, onOpen, onDeleted }) {
       sumRows.push(h('div', {}, h('span', {}, `Έκπτωση${doc.discountLabel ? ` ${doc.discountLabel}` : ''}`), h('span', { class: 'num' }, `−${formatMoney(doc.discountCents)}`)));
     }
     if (doc.depositCents > 0) {
-      sumRows.push(h('div', {}, h('span', {}, `Προκαταβολή ${formatNumber(doc.depositPercent)}%`), h('span', { class: 'num' }, formatMoney(doc.depositCents))));
+      sumRows.push(h('div', {}, h('span', {}, depositLabel(doc)), h('span', { class: 'num' }, formatMoney(doc.depositCents))));
+      sumRows.push(h('div', {}, h('span', {}, 'Εξόφληση'), h('span', { class: 'num' }, formatMoney(balanceOf(doc)))));
+    }
+    if (doc.deliveryDays > 0) {
+      sumRows.push(h('div', {}, h('span', {}, 'Παράδοση'), h('span', {}, deliveryLabel(doc.deliveryDays))));
     }
     parts.push(h('div', { class: 'totals quote-lines' }, lineRows, sumRows));
 

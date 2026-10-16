@@ -14,6 +14,7 @@ export const LIMITS = {
   vatIdLength: 20,
   termsLength: 2000,
   maxValidityDays: 365,
+  maxDeliveryDays: 999,
   maxPrice: 1_000_000, // euros
 };
 
@@ -269,6 +270,13 @@ export function validateQuote(body) {
   if (!Number.isInteger(validityDays) || validityDays < 0 || validityDays > LIMITS.maxValidityDays) {
     errors.push('Μη έγκυρη ισχύς προσφοράς.');
   }
+  const deliveryDays = docIn.deliveryDays ?? 0;
+  if (!Number.isInteger(deliveryDays) || deliveryDays < 0 || deliveryDays > LIMITS.maxDeliveryDays) {
+    errors.push('Μη έγκυρος χρόνος παράδοσης.');
+  }
+  // A deposit set for this quote, instead of the % (capped at the total later).
+  const fixedDepositCents = docIn.fixedDepositCents ?? null;
+  if (fixedDepositCents !== null && !isCents(fixedDepositCents)) errors.push('Μη έγκυρο ποσό προκαταβολής.');
   const subject = cleanText(docIn.subject).slice(0, 120);
   const date = typeof docIn.date === 'string' && !Number.isNaN(Date.parse(docIn.date)) ? new Date(docIn.date).toISOString() : null;
   const notes = cleanMultiline(docIn.notes);
@@ -298,6 +306,8 @@ export function validateQuote(body) {
       discountCents: docIn.discountCents ?? 0,
       vatRate: docIn.vatRate ?? 0,
       depositPercent: docIn.depositPercent ?? 0,
+      fixedDepositCents,
+      deliveryDays,
       notes,
     },
     draftJson,
