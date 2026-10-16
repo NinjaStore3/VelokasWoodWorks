@@ -34,6 +34,14 @@ export function parseQty(raw) {
   return /^\d{1,4}$/.test(text) ? Number(text) : null;
 }
 
+export const MAX_DELIVERY_DAYS = 999;
+
+// Days until delivery (0-999). Blank counts as 0; anything else is null.
+export function parseDays(raw) {
+  const days = parseQty(raw);
+  return days !== null && days <= MAX_DELIVERY_DAYS ? days : null;
+}
+
 export function toCents(euros) {
   return Math.round(euros * 100);
 }
@@ -134,10 +142,17 @@ export function emptyDraft() {
     discountMode: 'percent', // or 'amount'
     customer: { name: '', phone: '', address: '' },
     notes: '',
+    deliveryDays: '',
+    // The deposit or the balance as typed; the other one is what's left of
+    // the total. by: null = the deposit % from Settings.
+    payment: { by: null, amount: '' },
     costs: {},
     quoteRef: null, // { id, number } once saved to the archive
   };
 }
+
+// The two amounts the customer pays; the one typed decides the other.
+export const PAYMENT_PARTS = ['deposit', 'balance'];
 
 const plainObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
 
@@ -151,6 +166,11 @@ export function normaliseDraft(input) {
   draft.costs = plainObject(raw.costs);
   draft.customer = { ...emptyDraft().customer, ...plainObject(raw.customer) };
   if (draft.discountMode !== 'amount') draft.discountMode = 'percent';
+  const payment = plainObject(raw.payment);
+  draft.payment = PAYMENT_PARTS.includes(payment.by)
+    ? { by: payment.by, amount: String(payment.amount ?? '') }
+    : { by: null, amount: '' };
+  draft.deliveryDays = String(raw.deliveryDays ?? '');
 
   const jobs = plainObject(raw.jobs);
   draft.jobs = Object.fromEntries(SECTION_KEYS.map((key) => [key, { ...emptyJob(), ...plainObject(jobs[key]) }]));
@@ -228,6 +248,11 @@ export function computeQuote(config, input) {
     vatRate: settings.vatRate ?? 0,
     depositPercent: settings.depositPercent ?? 0,
   });
+  const payment = splitPayment(totals.grossCents, draft.payment);
+  if (payment.fixedDepositCents !== null) {
+    totals.depositCents = payment.fixedDepositCents;
+    totals.balanceCents = totals.grossCents - payment.fixedDepositCents;
+  }
 
   const costs = config.costs.map((cost) => {
     const raw = draft.costs[cost.id];
@@ -249,6 +274,8 @@ export function computeQuote(config, input) {
     ...totals,
     vatRate: settings.vatRate ?? 0,
     depositPercent: settings.depositPercent ?? 0,
+    ...payment,
+    deliveryDays: parseDays(draft.deliveryDays) ?? 0,
     costs,
     costCents,
     profitCents,
@@ -258,20 +285,54 @@ export function computeQuote(config, input) {
 
 // Totals from a subtotal (or from quote lines). Shared with the Worker, which
 // recomputes saved quotes so stored totals always add up.
-export function docTotals({ lines, subtotalCents, discountCents = 0, vatRate = 0, depositPercent = 0 }) {
+// The deposit is a % of the total, or an amount set for this quote.
+export function docTotals({ lines, subtotalCents, discountCents = 0, vatRate = 0, depositPercent = 0, fixedDepositCents = null }) {
   const subtotal = subtotalCents ?? lines.reduce((sum, line) => sum + line.totalCents, 0);
   const discount = Math.min(Math.max(0, discountCents), subtotal);
   const netCents = subtotal - discount;
   const vatCents = Math.round((netCents * vatRate) / 100);
   const grossCents = netCents + vatCents;
+  const depositCents =
+    fixedDepositCents == null ? Math.round((grossCents * depositPercent) / 100) : Math.min(fixedDepositCents, grossCents);
   return {
     subtotalCents: subtotal,
     discountCents: discount,
     netCents,
     vatCents,
     grossCents,
-    depositCents: Math.round((grossCents * depositPercent) / 100),
+    depositCents,
+    balanceCents: grossCents - depositCents,
   };
+}
+
+// The deposit when this quote sets one: the amount typed in «Προκαταβολή», or
+// the total less the amount typed in «Εξόφληση». Neither can exceed the total.
+export function splitPayment(grossCents, payment) {
+  const none = { fixedDepositCents: null, paymentInvalid: false, paymentOver: false };
+  if (!PAYMENT_PARTS.includes(payment?.by) || String(payment.amount ?? '').trim() === '') return none;
+  const amount = parseAmount(payment.amount);
+  if (amount === null) return { ...none, paymentInvalid: true };
+  const cents = toCents(amount);
+  const part = Math.min(cents, grossCents);
+  return {
+    fixedDepositCents: payment.by === 'deposit' ? part : grossCents - part,
+    paymentInvalid: false,
+    paymentOver: cents > grossCents,
+  };
+}
+
+// How the deposit is labelled: with its % when it comes from Settings.
+export function depositLabel(doc) {
+  return doc.fixedDepositCents == null && doc.depositPercent > 0 ? `Προκαταβολή ${formatNumber(doc.depositPercent)}%` : 'Προκαταβολή';
+}
+
+// What's left to pay after the deposit (older saved quotes don't store it).
+export function balanceOf(doc) {
+  return doc.balanceCents ?? doc.grossCents - doc.depositCents;
+}
+
+export function deliveryLabel(days) {
+  return `σε ${days} ${days === 1 ? 'ημέρα' : 'ημέρες'}`;
 }
 
 export function lineTotal(line) {
@@ -345,8 +406,16 @@ export function buildQuoteDoc(quote, draft, { date = new Date(), validityDays = 
     discountCents: quote.discountCents,
     vatRate: quote.vatRate,
     depositPercent: quote.depositPercent,
+    fixedDepositCents: quote.fixedDepositCents ?? null,
+    deliveryDays: quote.deliveryDays ?? 0,
     notes: (draft.notes ?? '').trim(),
-    ...docTotals({ lines, discountCents: quote.discountCents, vatRate: quote.vatRate, depositPercent: quote.depositPercent }),
+    ...docTotals({
+      lines,
+      discountCents: quote.discountCents,
+      vatRate: quote.vatRate,
+      depositPercent: quote.depositPercent,
+      fixedDepositCents: quote.fixedDepositCents ?? null,
+    }),
   };
 }
 
@@ -381,9 +450,13 @@ export function buildShareText(doc, { businessName }) {
     out.push(`Σύνολο με ΦΠΑ: ${formatMoney(doc.grossCents)}`);
   }
   if (doc.depositCents > 0) {
-    out.push(`Προκαταβολή ${formatNumber(doc.depositPercent)}%: ${formatMoney(doc.depositCents)}`);
+    out.push(`${depositLabel(doc)}: ${formatMoney(doc.depositCents)}`);
+    out.push(`Εξόφληση: ${formatMoney(balanceOf(doc))}`);
   }
-  if (doc.validityDays > 0) out.push('', `Ισχύει έως ${formatDate(addDays(date, doc.validityDays))}.`);
+  const dates = [];
+  if (doc.deliveryDays > 0) dates.push(`Παράδοση ${deliveryLabel(doc.deliveryDays)}.`);
+  if (doc.validityDays > 0) dates.push(`Ισχύει έως ${formatDate(addDays(date, doc.validityDays))}.`);
+  if (dates.length) out.push('', ...dates);
   if (doc.notes) out.push('', doc.notes);
   return out.join('\n');
 }

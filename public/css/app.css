@@ -1420,6 +1420,12 @@ textarea::placeholder { color: var(--text-3); }
 .job-card .empty-hint { margin-top: 0; }
 .other-row { grid-template-columns: 1.5fr 1fr; }
 
+/* ---------- Delivery and payment ---------- */
+.days-wrap input { padding-right: 78px; }
+.pay-hint { margin: 10px 2px 0; font-size: 13.5px; line-height: 1.45; color: var(--text-2); }
+.pay-hint.is-error { color: var(--danger); font-weight: 700; }
+.pay-hint + .link-btn { margin-top: 4px; }
+
 .price-tabs { display: grid; gap: 8px; margin-top: 6px; }
 .price-tabs .eyebrow { margin: 0 4px; color: var(--text-3); }
 .job-tabs { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--surface); box-shadow: var(--shadow-card); }

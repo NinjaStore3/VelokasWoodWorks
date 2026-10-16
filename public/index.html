@@ -122,16 +122,55 @@
           </div>
           <div class="field">
             <label for="quoteNotes">Σημειώσεις στην προσφορά</label>
-            <textarea id="quoteNotes" rows="3" maxlength="2000" placeholder="π.χ. Χρώμα λευκό ματ, παράδοση σε 5 εβδομάδες"></textarea>
+            <textarea id="quoteNotes" rows="3" maxlength="2000" placeholder="π.χ. Χρώμα λευκό ματ με λαβές αλουμινίου"></textarea>
           </div>
         </section>
 
-        <!-- 4. Internal costing (optional, never shared) -->
+        <!-- 4. Delivery and payment (printed on the quote) -->
+        <section class="card" data-accent="teal" aria-labelledby="payTitle">
+          <header class="card-head">
+            <span class="badge-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#truck"></use></svg></span>
+            <div class="card-titles">
+              <p class="eyebrow">Βήμα 4</p>
+              <h2 id="payTitle">Παράδοση &amp; πληρωμή</h2>
+            </div>
+          </header>
+
+          <div class="field">
+            <label for="deliveryDays">Παράδοση σε</label>
+            <div class="input-wrap days-wrap">
+              <input id="deliveryDays" inputmode="numeric" maxlength="3" placeholder="π.χ. 30" enterkeyhint="next">
+              <span class="suffix">ημέρες</span>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="depositAmount">Προκαταβολή</label>
+              <div class="input-wrap">
+                <input id="depositAmount" inputmode="decimal" placeholder="0" enterkeyhint="next">
+                <span class="suffix">€</span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="balanceAmount">Εξόφληση</label>
+              <div class="input-wrap">
+                <input id="balanceAmount" inputmode="decimal" placeholder="0" enterkeyhint="done">
+                <span class="suffix">€</span>
+              </div>
+            </div>
+          </div>
+          <p class="pay-hint" id="paymentHint" aria-live="polite"></p>
+          <button type="button" class="link-btn" id="paymentReset" hidden>
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#undo-2"></use></svg><span></span>
+          </button>
+        </section>
+
+        <!-- 5. Internal costing (optional, never shared) -->
         <details class="card card-collapsible" data-accent="violet" id="costCard">
           <summary class="card-head">
             <span class="badge-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#piggy-bank"></use></svg></span>
             <div class="card-titles">
-              <p class="eyebrow">Βήμα 4 · προαιρετικό</p>
+              <p class="eyebrow">Βήμα 5 · προαιρετικό</p>
               <h2>Εσωτερική κοστολόγηση</h2>
             </div>
             <svg class="icon card-chev" aria-hidden="true"><use href="/icons.svg#chevron-down"></use></svg>
