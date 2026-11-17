@@ -7,6 +7,7 @@ import {
   computeQuote,
   deliveryLabel,
   depositLabel,
+  draftHasInput,
   emptyDraft,
   extraUnit,
   formatDate,
@@ -29,6 +30,9 @@ import { pdfFileName, showPdf } from './pdf-share.js';
 import { session } from './session.js';
 
 const DRAFT_KEY = 'vw:draft:v1';
+// The form as it was when last saved to the archive (or opened from it).
+const SAVED_KEY = 'vw:draft-saved:v1';
+const snapshot = (draft) => JSON.stringify({ ...draft, quoteRef: null });
 const COST_TINT_OFFSET = 4;
 // Each job's card colour (.card[data-accent] in app.css) and chart colour.
 const JOB_ACCENT = { kitchen: 'amber', wardrobe: 'sky', door: 'teal', bathroom: 'green' };
@@ -111,6 +115,7 @@ export function createCalculator({ onQuoteSaved } = {}) {
     ['balance', $('#balanceAmount')],
   ];
   const paymentHint = $('#paymentHint');
+  const newQuoteBtn = $('#newQuoteBtn');
   const paymentReset = $('#paymentReset');
   const pdfBtn = $('#pdfBtn');
   const saveQuoteBtn = $('#saveQuoteBtn');
@@ -118,6 +123,14 @@ export function createCalculator({ onQuoteSaved } = {}) {
 
   let config = null;
   let draft = normaliseDraft(storage.get(DRAFT_KEY));
+  // The app opens on a new, empty quote when the last one is safely in the
+  // archive and wasn't changed since. Unsaved work is kept, with a banner.
+  let putAway = null; // that saved quote, offered back once the prices load
+  if (draft.quoteRef && storage.get(SAVED_KEY) === snapshot(draft)) {
+    putAway = draft;
+    draft = emptyDraft();
+  }
+  let restored = !draft.quoteRef && draftHasInput(draft);
   let quote = null;
   let jobRefs = new Map(); // job key -> its inputs and outputs
   let extraRefs = new Map(); // extra id -> its row
@@ -126,11 +139,14 @@ export function createCalculator({ onQuoteSaved } = {}) {
   let statusNotices = [];
   let changedSinceSave = null; // message when a reopened quote no longer adds up the same
 
+  // Every change goes through here, so «Νέα» is on as soon as anything is typed.
   const scheduleSave = () => {
+    newQuoteBtn.disabled = !draft.quoteRef && !draftHasInput(draft);
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => storage.set(DRAFT_KEY, draft), 250);
   };
   const hasContent = () => quote && quote.subtotalCents > 0;
+  const markSaved = (state = snapshot(draft)) => storage.set(SAVED_KEY, state);
 
   const jobMaterials = (key) => config.materials.filter((m) => sectionOf(m) === key);
   const currentMaterial = (key) => {
@@ -171,7 +187,7 @@ export function createCalculator({ onQuoteSaved } = {}) {
     saveQuoteBtn.querySelector('span').textContent = draft.quoteRef ? 'Ενημέρωση' : 'Αποθήκευση';
 
     renderCosts();
-    if (Object.values(draft.costs).some((value) => String(value).trim() !== '')) $('#costCard').open = true;
+    $('#costCard').open = Object.values(draft.costs).some((value) => String(value).trim() !== '');
     update();
   }
 
@@ -516,6 +532,9 @@ export function createCalculator({ onQuoteSaved } = {}) {
     discountSuffix.textContent = draft.discountMode === 'amount' ? '€' : '%';
   }
 
+  const newQuoteButton = () =>
+    h('button', { type: 'button', class: 'btn btn-soft', onclick: () => clearForm() }, icon('plus'), 'Νέα προσφορά');
+
   function renderNotice() {
     const banner = draft.quoteRef
       ? h(
@@ -529,10 +548,23 @@ export function createCalculator({ onQuoteSaved } = {}) {
             draft.customer.name ? `${draft.customer.name}. ` : '',
             'Οι αλλαγές αποθηκεύονται στην ίδια προσφορά.',
             changedSinceSave && h('p', { class: 'form-error' }, changedSinceSave),
-            h('div', { class: 'notice-actions' }, h('button', { type: 'button', class: 'btn btn-soft', onclick: () => clearForm() }, icon('plus'), 'Νέα προσφορά')),
+            h('div', { class: 'notice-actions' }, newQuoteButton()),
           ),
         )
-      : null;
+      : restored
+        ? h(
+            'div',
+            { class: 'notice is-edit is-draft' },
+            icon('notebook-pen'),
+            h(
+              'div',
+              {},
+              h('strong', {}, 'Πρόχειρη προσφορά από πριν'),
+              'Δεν έχει αποθηκευτεί. Συνέχισέ την ή ξεκίνα μια καινούργια, άδεια.',
+              h('div', { class: 'notice-actions' }, newQuoteButton()),
+            ),
+          )
+        : null;
     notice.replaceChildren(...[banner, ...statusNotices].filter(Boolean));
   }
 
@@ -688,8 +720,10 @@ export function createCalculator({ onQuoteSaved } = {}) {
   function clearForm() {
     const previous = structuredClone(draft);
     const previousNote = changedSinceSave;
+    const previousRestored = restored;
     draft = emptyDraft();
     changedSinceSave = null;
+    restored = false;
     render();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     toast('Νέα, άδεια προσφορά.', {
@@ -697,11 +731,13 @@ export function createCalculator({ onQuoteSaved } = {}) {
       onAction: () => {
         draft = previous;
         changedSinceSave = previousNote;
+        restored = previousRestored;
         render();
       },
     });
   }
   $('#clearBtn').addEventListener('click', clearForm);
+  newQuoteBtn.addEventListener('click', clearForm);
 
   discountInput.addEventListener('input', () => {
     draft.discount = discountInput.value;
@@ -782,12 +818,15 @@ export function createCalculator({ onQuoteSaved } = {}) {
     }
     const doc = currentDoc();
     const body = { customer: doc.customer, doc, draft: frozenDraft(), costCents: quote.costCents };
+    const sent = snapshot(draft);
     try {
       const saved = draft.quoteRef
         ? await api('PUT', `/api/admin/quotes/${draft.quoteRef.id}`, body)
         : await api('POST', '/api/admin/quotes', { ...body, status: 'draft' });
       draft.quoteRef = { id: saved.id, number: saved.number };
       changedSinceSave = null;
+      restored = false;
+      markSaved(sent);
       scheduleSave();
       renderNotice();
       saveQuoteBtn.querySelector('span').textContent = 'Ενημέρωση';
@@ -869,6 +908,20 @@ export function createCalculator({ onQuoteSaved } = {}) {
             ]),
       ];
       render();
+
+      if (putAway) {
+        const previous = putAway;
+        putAway = null;
+        toast(`Νέα, άδεια προσφορά. Η ${previous.quoteRef.number} είναι στις Προσφορές.`, {
+          actionLabel: 'Άνοιγμα',
+          onAction: () => {
+            draft = previous;
+            reconcileDraft();
+            render();
+            markSaved();
+          },
+        });
+      }
     },
 
     // Opens a saved quote for editing, or as a new copy of it. Whatever was
@@ -878,9 +931,12 @@ export function createCalculator({ onQuoteSaved } = {}) {
       const previousNote = changedSinceSave;
       const replacesWork = hasContent() && previous.quoteRef?.id !== saved.id;
 
+      const previousRestored = restored;
       draft = normaliseDraft(saved.draft);
       draft.quoteRef = copy ? null : { id: saved.id, number: saved.number };
       reconcileDraft();
+      restored = false;
+      if (!copy) markSaved();
       quote = computeQuote(config, draft);
       changedSinceSave =
         !copy && quote.netCents !== saved.netCents
@@ -892,6 +948,7 @@ export function createCalculator({ onQuoteSaved } = {}) {
       const restore = () => {
         draft = previous;
         changedSinceSave = previousNote;
+        restored = previousRestored;
         render();
         scheduleSave();
       };

@@ -48,6 +48,9 @@
               <p class="eyebrow">Βήμα 1</p>
               <h2 id="jobTitle">Τι προσφορά φτιάχνεις;</h2>
             </div>
+            <button type="button" class="new-quote-btn" id="newQuoteBtn" aria-label="Νέα, άδεια προσφορά" disabled>
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"></use></svg><span>Νέα</span>
+            </button>
           </header>
           <div class="job-picker" id="jobPicker" role="group" aria-labelledby="jobTitle"></div>
           <div class="job-combo" id="jobCombo" hidden></div>
@@ -184,8 +187,8 @@
         </details>
 
         <button type="button" class="btn btn-ghost btn-block" id="clearBtn">
-          <svg class="icon" aria-hidden="true"><use href="/icons.svg#rotate-ccw"></use></svg>
-          Καθαρισμός
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#plus"></use></svg>
+          Νέα προσφορά
         </button>
       </form>
     </section>
