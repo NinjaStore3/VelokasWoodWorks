@@ -1411,6 +1411,26 @@ textarea::placeholder { color: var(--text-3); }
 .job-combo .chip { display: inline-flex; align-items: center; gap: 6px; }
 .job-combo .chip .icon { width: 16px; height: 16px; }
 
+/* «Νέα» in Step 1: empties the form for a new quote. */
+.new-quote-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  flex: none;
+  align-self: center;
+  height: 38px;
+  margin-left: auto;
+  padding: 0 14px 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--ink, var(--text));
+  font-size: 15px;
+  font-weight: 800;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.new-quote-btn .icon { width: 18px; height: 18px; }
+.new-quote-btn:active { transform: scale(0.96); }
+.new-quote-btn:disabled { opacity: 0.4; }
+
 .job-sub {
   display: flex; align-items: center; gap: 6px;
   margin: 18px 0 10px;

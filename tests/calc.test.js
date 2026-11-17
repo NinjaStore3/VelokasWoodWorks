@@ -6,6 +6,7 @@ import {
   buildShareText,
   computeQuote,
   depositLabel,
+  draftHasInput,
   emptyDraft,
   jobSubject,
   normaliseDraft,
@@ -390,4 +391,31 @@ test('drafts and quotes from before keep working without payment fields', () => 
   const oldDoc = { grossCents: 100000, depositCents: 40000, depositPercent: 40 };
   assert.equal(balanceOf(oldDoc), 60000);
   assert.equal(depositLabel(oldDoc), 'Προκαταβολή 40%');
+});
+
+test('a new quote reads as empty until something is typed', () => {
+  assert.equal(draftHasInput(emptyDraft()), false);
+  assert.equal(draftHasInput(draft({ sections: ['bathroom'], jobs: { bathroom: { materialId: 40 } } })), false, 'choosing alone is not input');
+  assert.equal(draftHasInput(draft({ extras: { 3: { qty: '0', price: null } } })), false, 'a stepper back at 0');
+  for (const typed of [
+    kitchen({ qty: '2' }),
+    kitchen({ price: '300' }),
+    draft({ extras: { 3: { qty: '1', price: null } } }),
+    draft({ customer: { name: 'Νίκος', phone: '', address: '' } }),
+    draft({ notes: 'Λευκό' }),
+    draft({ deliveryDays: '30' }),
+    draft({ payment: { by: 'deposit', amount: '500' } }),
+    draft({ costs: { 10: '120' } }),
+    { meters: '3' }, // a draft from before job types
+  ]) {
+    assert.equal(draftHasInput(typed), true, JSON.stringify(typed).slice(0, 80));
+  }
+});
+
+test('an empty quote has room for every kind of job', () => {
+  const empty = emptyDraft();
+  assert.deepEqual(Object.keys(empty.jobs), ['kitchen', 'wardrobe', 'door', 'bathroom']);
+  // Picking a kind of job straight after «Νέα προσφορά»
+  const quote = computeQuote(config, { ...empty, sections: ['bathroom'] });
+  assert.deepEqual(quote.sections.map((s) => [s.key, s.totalCents]), [['bathroom', 0]]);
 });

@@ -146,7 +146,7 @@ export function emptyDraft() {
     combo: false, // chosen through «Συνδυασμός»
     // Per job: the material, how much of it (in its unit) and a price that
     // overrides the catalogue one (null = catalogue price).
-    jobs: { kitchen: emptyJob(), wardrobe: emptyJob(), door: emptyJob() },
+    jobs: Object.fromEntries(SECTION_KEYS.map((key) => [key, emptyJob()])),
     extras: {}, // by extra id: { qty, price }
     other: '',
     otherLabel: '',
@@ -197,6 +197,20 @@ export function normaliseDraft(input) {
   draft.sections = picked.length ? picked : ['kitchen'];
   draft.combo = raw.combo === true;
   return draft;
+}
+
+// Whether anything has been typed into the form. Picking a kind of job or a
+// material alone doesn't count: the form still reads as a new, empty quote.
+export function draftHasInput(input) {
+  const draft = normaliseDraft(input);
+  const filled = (value) => String(value ?? '').trim() !== '';
+  return (
+    Object.values(draft.jobs).some((job) => filled(job.qty) || job.price != null) ||
+    Object.values(draft.extras).some((entry) => (parseAmount(entry?.qty ?? '') ?? 1) > 0 || entry?.price != null) ||
+    [draft.other, draft.otherLabel, draft.discount, draft.notes, draft.deliveryDays, draft.payment.amount].some(filled) ||
+    Object.values(draft.customer).some(filled) ||
+    Object.values(draft.costs).some(filled)
+  );
 }
 
 // One job of the quote: its material line and its extras.

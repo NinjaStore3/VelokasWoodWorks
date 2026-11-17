@@ -34,7 +34,7 @@ The total updates live in the bar at the bottom. **Προσφορά** opens the 
 - **Αποθήκευση:** saves it to the archive as `2026-001`, `2026-002`… (numbered per year). Making a PDF while logged in saves it too, so the PDF carries the number.
 - **Κείμενο:** the same quote as plain text for a quick message.
 
-Whatever is typed is kept on the phone, so a refresh doesn't lose it.
+**Νέα** (top of Step 1, and at the bottom of the form) empties the form for a new quote; the toast can undo it. Unsaved work is kept on the phone, so closing the app or a refresh doesn't lose it; it comes back with a «Πρόχειρη προσφορά από πριν» banner. A quote that was saved and not changed since isn't brought back: the app opens on a new, empty quote, and the toast offers to open the saved one again.
 
 **Προσφορές (archive)**, password protected: this year's quotes, how much was closed and the success rate; search by name, phone or number; filter by status. Tapping a quote shows it and lets Panos mark it Πρόχειρη → Στάλθηκε → Κλείστηκε / Δεν προχώρησε, make its PDF again, call the customer, open it in the calculator to change it (same number), start a new quote from a copy, or delete it.
 
